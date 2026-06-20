@@ -1,0 +1,21 @@
+# instance 默认 .gitignore —— execution-plane 的本地状态、generated 物、嵌套外部 repo 不进库
+
+# 本地安装清单 / 缓存 / 运行日志（local-only，不跨机器同步）
+installed-skills.json
+.cache/
+*.log
+
+# 可重建的生成物（如 SQLite 查询缓存、embedding、生成索引）
+generated/
+*.sqlite
+*.sqlite3
+
+# 嵌套的外部代码项目：在这里逐条 gitignore 其路径，让两库独立（不用 submodule）
+# projects/<some-external-repo>/
+
+# macOS
+.DS_Store
+
+# Obsidian 本地窗口布局（多设备会冲突）
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json

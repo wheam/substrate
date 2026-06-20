@@ -1,0 +1,16 @@
+# skill-manifest.schema.yaml — 每个 skill 文件夹的元信息契约（含 _incoming 回流件）
+# admission 用它做风险分级；skill-sync 用 target_runtimes 做选择性安装。
+type: object
+required: [name, target_runtimes, risk_level]
+properties:
+  name:            { type: string }
+  source_agent:    { type: string, description: "回流来源 agent；自己写的可省" }
+  created_at:      { type: string, format: date }
+  reason:          { type: string, description: "为什么有这个 skill" }
+  target_runtimes: { type: array, items: { enum: [hermes, claude-code, codex] } }
+  risk_level:      { enum: [low, medium, high], description: "low=仅读写 markdown；其余见下" }
+  capabilities:    { type: array, items: { type: string }, description: "如 shell/network/install/secrets/modify-skills" }
+  dependencies:    { type: array, items: { type: string } }
+  related_existing_skills: { type: array, items: { type: string } }
+# 准入规则：risk_level=low 可自动晋升；凡 capabilities 含
+# shell/system/network/install/secrets/modify-skills/modify-governance → 一律人工 audit。
