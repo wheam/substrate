@@ -11,13 +11,14 @@
 
 | zone | 是什么 | 区 README |
 |---|---|---|
-| governance/ | 维护规则（control plane） | governance/ |
+| governance/ | 维护规则（control plane） | governance/CONSTITUTION.md |
 | fleet/ | 设备清单与角色 | fleet/README.md |
-| knowledge/ | 知识 | knowledge/ |
-| collections/ | 收藏 | collections/ |
-| memory/ | 共享记忆 | memory/ |
-| projects/ | 个人项目 | projects/ |
+| knowledge/ | 知识 | knowledge/README.md |
+| collections/ | 收藏 | collections/README.md |
+| memory/ | 共享记忆 | memory/about-owner/README.md |
+| projects/ | 个人项目 | projects/README.md |
 | skills/ | skill 分发 | skills/README.md |
+| raw/ | 原始素材（只读） | raw/README.md |
 
 > 文件级索引在各 zone 自己的 README 里（两级索引）。完整 zone 注册见 `governance/zones.md`。
 
@@ -25,4 +26,4 @@
 
 1. 读 `governance/bootstrap.md` → 按步骤自举。
 2. 读 `governance/CONSTITUTION.md` + `governance/zones.md`。
-3. 装 skill（`skills/` + `skills/_registry.md`，由 skill-sync 按本机角色装）。
+3. 装 skill（`skills/` + `skills/_registry.md`，由 substrate-sync 按本机角色装）。

@@ -1,5 +1,5 @@
 # registry.schema.yaml — skills/_registry.md 里每个第三方 skill 条目的契约
-# 第三方 skill 代码不入库，只在这里记 URL；安装时由 skill-sync 从上游 clone/pull。
+# 第三方 skill 代码不入库，只在这里记 URL；安装时由 substrate-sync 从上游 clone/pull。
 type: object
 required: [name, upstream_git_url, pin, target_runtimes]
 properties:
@@ -7,6 +7,6 @@ properties:
   upstream_git_url: { type: string }
   pin:              { type: string, description: "tag/commit/branch；裸追 main 需显式标 trusted-floating" }
   trusted_floating: { type: boolean, default: false }
-  target_runtimes:  { type: array, items: { enum: [hermes, claude-code, codex] } }
+  target_runtimes:  { type: array, items: { type: string }, description: "取值由实例的 adapter 定义，引擎不钉死具体产品名" }
   install_paths:    { type: object, description: "各 runtime 的安装路径，可由 adapter 推断" }
   notes:            { type: string }

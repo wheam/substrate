@@ -1,5 +1,5 @@
 # zone.schema.yaml — governance/zones.md 顶部 YAML 块里每个 zone 条目的契约
-# 原则：字段从最小集起步，需要再长。wiki-doctor / skill-sync 解析这个，不去猜 markdown 表格。
+# 原则：字段从最小集起步，需要再长。substrate-doctor / substrate-sync 解析这个，不去猜 markdown 表格。
 type: object
 required: [id, path, schema, maintainer_skill, readers, writers]
 properties:
@@ -8,7 +8,8 @@ properties:
   purpose:         { type: string, description: "一句话用途" }
   schema:          { type: string, description: "本区内容 schema 版本，如 collection-zone-v1" }
   maintainer_skill:{ type: string, description: "负责维护的 skill 名" }
-  readers:         { type: array, items: { enum: [hermes, claude-code, codex, all] } }
-  writers:         { type: array, items: { enum: [hermes, claude-code, codex, all] } }
+  readers:         { type: array, items: { type: string }, description: "runtime 名或 'all'（通配）。具体 runtime 由实例的 adapter/fleet 定义，引擎不钉死产品名" }
+  writers:         { type: array, items: { type: string }, description: "同 readers" }
   disposition:     { enum: [canonical, reference], default: canonical }
   privacy:         { enum: [public, internal, private, sensitive], default: private }
+  graduation:      { type: string, description: "毕业触发条件，如 'rows>2000 → 分片 JSONL；需 join → SQLite cache'。doctor 解析此字段做阈值监测，越线只提议不自动迁（见 BUILD-PLAN §8）" }

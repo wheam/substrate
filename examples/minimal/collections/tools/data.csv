@@ -1,0 +1,5 @@
+id,name,category,description,url
+ripgrep,ripgrep,cli,快速递归搜索工具（grep 替代）,https://github.com/BurntSushi/ripgrep
+jq,jq,cli,命令行 JSON 处理器,https://github.com/jqlang/jq
+fzf,fzf,cli,命令行模糊查找器,https://github.com/junegunn/fzf
+pandoc,Pandoc,cli,通用文档格式转换器,https://github.com/jgm/pandoc

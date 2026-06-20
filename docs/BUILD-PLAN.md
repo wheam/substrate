@@ -48,7 +48,7 @@
 ```
 substrate/
 ├── README.md  LICENSE  CONTRIBUTING.md
-├── docs/                 # architecture / concepts / faq
+├── docs/                 # architecture / concepts
 ├── template/             # init 时脚手架成用户 instance 的骨架（见 3.2）
 ├── schemas/              # 契约：zone / skill-manifest / registry / migration
 ├── skills/               # 参考 skill 套件（substrate-*，见 §8）
@@ -180,8 +180,8 @@ Claude Code「用」一个 skill = 该 skill 在它的 skill 目录（`~/.claude
 - **关键**：复用 `intake`（单条分类器的批量版）+ **来源适配器**（Obsidian vault / Notion 导出 / 纯 md 文件夹 / Apple Notes 导出…）；幂等 + dry-run + 审批闸门；模糊的进隔离区，**不批量塞垃圾**。
 
 **完整 init 流程（别人 clone 引擎后）**：
-1. 拿引擎：`git clone` 或 `npx create-substrate`。
-2. `substrate init <dir>`：把 `template/` 脚手架成新实例仓库（治理模板、空 zone、skills 结构、.gitignore、SUBSTRATE_VERSION）；交互填占位（实例名、用哪些 runtime、先开哪些 zone）。
+1. 拿引擎：`git clone`（agent-native 主路径）。可选：将来提供 `npx create-substrate` 薄壳。
+2. **`substrate-bootstrap` skill 脚手架**（或可选的薄 `substrate init` CLI）：把 `template/` 拷成新实例仓库（治理模板、空 zone、skills 结构、.gitignore、SUBSTRATE_VERSION）；交互填占位（实例名、用哪些 runtime、先开哪些 zone）。
 3. 用户 `git init` 自己的实例 + 推到**自己的**私有远程（engine 与 instance 是两个仓库）。
 4. **可选：`substrate import <source>`** 把已有内容搬进来（本节）。
 5. agent 跑 `substrate-bootstrap`：读宪法/zones → 配本地身份 → `substrate-sync` 装参考 skill 到 runtime。
@@ -193,7 +193,7 @@ Claude Code「用」一个 skill = 该 skill 在它的 skill 目录（`~/.claude
 
 **核心策略：兼容靠「开放格式」，不靠「专属集成」。** Substrate 的 data plane 就是**纯 markdown + YAML frontmatter + `[[wikilinks]]` + CSV/JSONL**——这是所有 PKM 工具的最小公约数。
 
-- **Obsidian 即插即用**：它本就读「一堆带 `[[wikilink]]` 的 md 文件夹」，所以 Substrate 实例**今天就能直接用 Obsidian 打开读写**（<your-instance> 已在 Obsidian 用）。
+- **Obsidian 即插即用**：它本就读「一堆带 `[[wikilink]]` 的 md 文件夹」，所以任意 Substrate 实例**今天就能直接用 Obsidian 打开读写**，零迁移。
 - **约定即接口**：链接用 `[[name]]`（Obsidian 原生）、frontmatter 用 YAML、结构化用 CSV/JSONL。任何 markdown 工具（Logseq、纯编辑器、grep、RAG）都能消费，零迁移。
 - **可选 `adapters/obsidian/`**：只放「锦上添花」的工具专属配置——推荐的 vault 设置、把 `governance/`、`skills/_incoming/` 等下划线目录加进 Obsidian「排除文件」以减噪、graph 视图配置。`.obsidian/workspace.json` 等每设备布局 gitignore（多设备会冲突）。
 - **专属格式的工具（如 Notion）**：通过**导入/导出适配器**互通（`substrate-import` 的 Notion-export 适配器把它搬进来；反向导出可后置）。
@@ -205,6 +205,7 @@ Claude Code「用」一个 skill = 该 skill 在它的 skill 目录（`~/.claude
 
 1. 宪法单源 + 写入走 skill → 规则不漂移。2. 两级索引。3. zones 注册 + 新增类型 procedure。4. `substrate-doctor` 增量体检（断链/孤儿/索引漂移/缺 frontmatter/registry 风险）。5. bootstrap 一致上手。
 **核心原则：协议失效时，结果应是「可修复的漂移」，而非「污染正式状态」。** 防御纵深：预防（入口横幅+走 skill）→ 检测（doctor）→ 隔离（危险写入/回流进 audit 区）→ 纠正（低风险自动修，高风险转人）。无法 100% 强制模型守协议，所以架构必须容错。
+> **doctor 形态（skills-first）**：doctor 是 skill，不是二进制。为可复现 + 便宜 + 可 CI，它**内嵌零安装的确定性 shell**（`grep` 抽 `[[wikilink]]`〔先剥 inline code/代码块〕集合差找断链/孤儿、`sort`/`comm` 找漂移、python3 标准库做受限子集 frontmatter 解析〔不假设 PyYAML〕）。skill 是唯一真相源；它同时是迁移的测试套件（迁移前后跑同一套不变量）。**实现约束见 §15 P1。**
 
 ---
 
@@ -234,11 +235,12 @@ Claude Code「用」一个 skill = 该 skill 在它的 skill 目录（`~/.claude
 
 ## 15. 开发路线（建议给开发 session）
 
-- **P0 契约与模板**：定稿 4 个 schema；填实 `template/`（宪法/zones/admission/bootstrap/architecture 模板 + 入口 README + .gitignore + SUBSTRATE_VERSION）。
+- **P0 契约与模板**：定稿 schema（4 个 + `zone.schema` 补 `graduation`）；写 `docs/concepts.md` 术语表；填实 `template/`（governance 五件套 + 各 zone README 含 **Agent Packet**（两级索引）+ `skills/README`+`_registry` + `fleet/` + 入口 README + .gitignore + SUBSTRATE_VERSION）；立起 `examples/minimal`（中立假数据）当 doctor 靶子。〔已完成〕
 - **P1 核心闭环**：`substrate-curator` + `substrate-sync` + `substrate-doctor` 最小版 + `substrate-bootstrap`；跑通「clone→bootstrap→装 skill→读写一篇→doctor 通过」。
+  - **doctor 实现约束（自检 `examples/minimal` 时已踩中、验证过）**：① **不假设 PyYAML**——frontmatter 用 python3 标准库做受限子集解析，或声明 PyYAML 为可选依赖、缺失时降级；② 抽 `[[wikilink]]` 集合**前必须先剥离 inline code（反引号）与 fenced code block**，否则教学/示例页里举例的 `[[...]]` 会被误判断链；③ 孤儿 / frontmatter 合规检查**豁免** `governance/*` 与 README/索引/分片这类结构页。
 - **P2 准入与导入**：`substrate-intake`（分类+守门）+ `substrate-import`（含 generic-md / obsidian 来源适配器）；`_incoming` 隔离/晋升跑通。
 - **P3 迁移机制**：`migrations/` + `substrate-migrate`；写第一个真实迁移并验证 + 回滚 + 多机器幂等。
-- **P4 适配器与 CLI**：`adapters/*` 接口定义（claude-code/codex/hermes/obsidian/generic）；`substrate` CLI；`examples/minimal`。
+- **P4 适配器（+ 可选薄 CLI）**：`adapters/*` 接口定义——**先做 `generic-filesystem` + `claude-code`**，等第二个 runtime 真正逼出抽象再扩（codex/hermes/obsidian）。CLI **非必需、后置**：operations 第一公民是 skill，确定性靠 `substrate-doctor` skill **内嵌零安装 shell**（grep/sort/python3），不依赖 Node/Python 运行时（见 `cli/README.md`）。`examples/minimal` 已在 P0 立起，这里补到能过 doctor。
 - **P5 收尾 skill**：`collections` / `memory` / `todo`。
 
 ---
