@@ -7,7 +7,7 @@
 | skill | phase | 作用 |
 |---|---|---|
 | `substrate-curator` | P1 | 读写/维护知识页 + 执行宪法 |
-| `substrate-sync` | P1 | 按角色/registry 选择性安装到各 runtime + 本地清单 + 回流到 `_incoming` |
+| `substrate-sync` | P1 | 按角色/registry 选择性安装到各 runtime + 本地清单（回流到 `_incoming` 由 `substrate-intake` 负责） |
 | `substrate-doctor` | P1 | 防退化体检 + 毕业阈值监测 + **迁移测试套件**（实现约束见 BUILD-PLAN §15 P1） |
 | `substrate-bootstrap` | P1 | 新 agent 自举 |
 | `substrate-intake` | P2 | 内容分类器 + 自动回流守门（admission 风险分级） |
