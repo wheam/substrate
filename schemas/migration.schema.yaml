@@ -1,0 +1,22 @@
+# migration.schema.yaml — engine 的 migrations/ 里每个迁移文件的契约
+# 把"引擎版本升级"当数据库迁移做：有序、命名、幂等、可验证、可回滚。
+type: object
+required: [id, from_version, to_version, title, steps, idempotent]
+properties:
+  id:           { type: string, description: "如 0003-restaurants-to-collections" }
+  from_version: { type: string }
+  to_version:   { type: string }
+  title:        { type: string }
+  description:  { type: string }
+  risk_level:   { enum: [low, medium, high] }
+  idempotent:   { const: true, description: "必须幂等：重跑安全，多机器重复触发也安全" }
+  steps:
+    type: array
+    items:
+      type: object
+      required: [action, verify]
+      properties:
+        action: { type: string, description: "做什么（移动/改 schema/拆文件/加 governance 文件…）" }
+        verify: { type: string, description: "这步完成后如何验证" }
+  preserves:    { type: array, items: { type: string }, description: "必须保持的不变量（计数/链接/zone 注册）" }
+  rollback:     { type: string, description: "失败如何回滚（默认：git reset 到 pre-migrate tag）" }

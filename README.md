@@ -1,4 +1,4 @@
-# agent-state-os（工作名）
+# substrate（工作名）
 
 > **个人 AI agent 舰队的「共享状态层」引擎**——一个 git 原生、可被 agent 操作、可审计、可自描述的模板与机制。
 > 状态：**设计/脚手架阶段**。这是一个从真实私有 instance 抽象出来的**开源引擎**，本身**不含任何个人内容**。
@@ -43,7 +43,7 @@
 ## 目录结构
 
 ```
-agent-state-os/
+substrate/
 ├── README.md            # 本文件
 ├── LICENSE              # 开源许可（占位 MIT，待定）
 ├── CONTRIBUTING.md      # 贡献指南（占位）
@@ -91,7 +91,7 @@ agent-state-os/
 │   ├── hermes/          #   ~/.hermes/skills 等
 │   └── generic-filesystem/  # 兜底：纯文件系统
 │
-├── cli/                 # agent-state CLI（init / doctor / sync-skills / admit / new-zone）
+├── cli/                 # substrate CLI（init / doctor / sync-skills / admit / new-zone）
 │   └── README.md
 │
 └── examples/
@@ -103,11 +103,11 @@ agent-state-os/
 ## CLI 设想（待实现）
 
 ```
-agent-state init         # 把 template/ 脚手架成一个新 instance 仓库
-agent-state doctor       # 跑 wiki-doctor 体检
-agent-state sync-skills  # 按本机角色选择性安装/更新 skill
-agent-state admit        # 审查 _incoming/ 里的回流 skill，晋升或转人工
-agent-state new-zone     # 按 procedure 新增一个内容类型
+substrate init         # 把 template/ 脚手架成一个新 instance 仓库
+substrate doctor       # 跑 wiki-doctor 体检
+substrate sync-skills  # 按本机角色选择性安装/更新 skill
+substrate admit        # 审查 _incoming/ 里的回流 skill，晋升或转人工
+substrate new-zone     # 按 procedure 新增一个内容类型
 ```
 
 ---

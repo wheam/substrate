@@ -5,7 +5,7 @@
 
 # {{INSTANCE_NAME}}
 
-> 由 agent-state-os 脚手架生成的个人状态仓库（instance）。用 Obsidian 阅读，用 agent 维护。
+> 由 substrate 脚手架生成的个人状态仓库（instance）。用 Obsidian 阅读，用 agent 维护。
 
 ## 给人看的总览（zone 级索引）
 
