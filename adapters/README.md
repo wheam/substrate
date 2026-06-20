@@ -18,5 +18,5 @@
 | `hermes/` | skill-runtime | Nous Research Hermes（声明，未在真机验证） |
 | `obsidian/` | **view-layer** | Obsidian——**不是 skill runtime**，只放 vault 视图设置（排除目录 / 每设备布局），不装 skill |
 
-> **当前为声明式规范**：`substrate-sync` 暂未自动读取 adapter（`--target` 由调用方传入）；`adapter.yaml` 的 `variant_suffix` 等字段须与 `sync.py` 的 `SKILL.<runtime>.md` 约定**手工保持一致**。让 sync 自动读 adapter 取 target 是后续小项（见 BUILD-PLAN §15 P4）。
+> **声明式规范 + 已被消费**：`substrate-sync` 省略 `--target` 时**会读 `adapters/<runtime>/adapter.yaml` 推断安装目录**（认 `skill_install.target`、`target_env_override`、`target_fallback`；`kind: view-layer` 的 adapter 会被拒绝）。`variant_suffix` 等字段仍须与 `sync.py` 的 `SKILL.<runtime>.md` 约定**手工保持一致**。
 > 接口未定稿：先在真实多 runtime 上跑通，接口自然浮现，再抽象稳定 adapter API（必要时加 `schemas/adapter.schema.yaml`）。

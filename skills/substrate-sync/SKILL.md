@@ -28,7 +28,7 @@ python3 <本 skill 目录>/sync.py --src <实例skills目录或引擎skills> \
 … 同样命令 + --apply
 ```
 
-- `--target` 例：Claude Code 是 `~/.claude/skills`（具体由该 runtime 的 **adapter** 给出）。
+- `--target` **省略时自动从 `adapters/<runtime>/adapter.yaml` 推断**（如 claude-code → `~/.claude/skills`；generic-filesystem → `$SUBSTRATE_SKILL_DIR` 或 fallback）；也可显式传。`kind: view-layer` 的 adapter（obsidian）会被拒绝，不装 skill。
 - 多 runtime 变体：skill 目录里有 `SKILL.<runtime>.md` 就用它落地为该机的 `SKILL.md`；否则用默认 `SKILL.md`。
 - 第三方：每条须有 `pin`（无 pin 会标 `CLONE(no-pin!)`，风险）；按 pin clone + checkout。
 - 写 `installed-skills.json` 到 `--target`（runtime 的 skill 目录，在实例 repo **之外**，天然 local-only、不入库；仅当 `--target` 被指到实例内某路径时才靠 `.gitignore` 兜底）。
