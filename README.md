@@ -67,7 +67,7 @@ substrate/
 │   │   ├── README.md        # 本区规则
 │   │   ├── _registry.md     # 第三方 skill 清单（URL + pin + 目标 runtime）
 │   │   └── _incoming/       # 自动回流隔离区，过 admission 才晋升
-│   ├── memory/about-me/     # 跨 agent 共享的「关于主人」记忆（默认仅特定 runtime）
+│   ├── memory/about-owner/     # 跨 agent 共享的「关于主人」记忆（默认仅特定 runtime）
 │   ├── collections/         # 通用收藏（行式 canonical + 索引）
 │   ├── projects/            # 个人非代码项目
 │   ├── knowledge/           # 知识页（concept/entity/comparison/insight 由用户自定）
