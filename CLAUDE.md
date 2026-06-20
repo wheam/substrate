@@ -19,8 +19,8 @@
 
 ## 怎么开发
 
-- **按 BUILD-PLAN 的 phase 走**：P0 契约与模板 → P1 核心闭环 → P2 准入与导入 → P3 迁移机制 → P4 适配器与 CLI → P5 收尾 skill。每个 phase 自成可验证的里程碑。
-- **契约先行**：先把 `schemas/`（zone / skill-manifest / registry / migration）定稿，再写消费它们的 skill/CLI。
+- **按 BUILD-PLAN 的 phase 走**：P0 契约与模板 → P1 核心闭环 → P2 准入与导入 → P3 迁移机制 → P4 适配器 → P5 收尾 skill。每个 phase 自成可验证的里程碑。
+- **契约先行**：先把 `schemas/`（zone / skill-manifest / registry / migration）定稿，再写消费它们的 skill。
 - **YAGNI + 防过度设计**：字段、机制都从最小集起步，需要再长。这套系统的灵魂之一就是"别把库搞复杂、别退化"。
 - **自洽校验**：引擎自带 `examples/minimal/` 要能跑通"init→bootstrap→sync→读写→doctor 通过"。
 - **迁移是一等公民**：版本升级当数据库迁移做（有序/幂等/可验证/可回滚），见 BUILD-PLAN §9。**任何迁移都不能丢数据**——git tag 快照 + doctor 前后校验 + 模糊内容进隔离区。

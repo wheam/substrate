@@ -54,7 +54,6 @@ substrate/
 ├── skills/               # 参考 skill 套件（substrate-*，见 §8）
 ├── adapters/             # 可插拔：claude-code / codex / hermes / obsidian / generic-filesystem
 ├── migrations/           # 版本迁移（见 §9）
-├── cli/                  # substrate init/doctor/sync/admit/import/migrate/new-zone
 └── examples/minimal/     # 一个跑通的最小 instance
 ```
 
@@ -115,11 +114,11 @@ substrate/
 Claude Code「用」一个 skill = 该 skill 在它的 skill 目录（`~/.claude/skills/`）里，它就能自动发现并调用。所以问题只是**怎么把 skill 装进那个目录**——这就是 `substrate-sync` 干的事：
 
 1. **clone 实例仓库**到本机（先配好 SSH-over-443）。
-2. **种子一次**：把 `substrate-bootstrap` + `substrate-sync` 放进 CC 的 skill 目录（一行安装脚本 / `substrate sync` CLI 做这步；解决"要 sync 先得有 sync"的鸡生蛋）。
+2. **种子一次**：把 `substrate-bootstrap` + `substrate-sync` 放进 CC 的 skill 目录（一行种子安装脚本 cp/curl 做这步；解决"要 sync 先得有 sync"的鸡生蛋）。
 3. **跑 sync**：读 `skills/`（自己的 → 直接拷进 `~/.claude/skills/`）+ `_registry.md`（第三方 → 按 pin 从上游 clone → 拷进去），**只装 `target_runtimes` 含 `claude-code` 且符合本机角色的**；多 runtime skill 取 CC 变体。
 4. 之后 CC 即可在 skill 目录里发现并调用全部适用 skill；本地写一份「装了啥+版本」清单，下次增量更新。
 
-> 谁来跑 sync：在有 Hermes 管家的机器上由 Hermes 统一装到 CC/Codex/Hermes 三处，CC 不用自己动；**纯 CC 机器**则用 `substrate sync` CLI 自助（CLI 不依赖任何 agent）。
+> 谁来跑 sync：在有管家的机器上由管家统一装到各 runtime，CC 不用自己动；**纯 CC 机器**则直接跑 `substrate-sync` 的 `sync.py` 自助。
 
 ---
 
@@ -180,8 +179,8 @@ Claude Code「用」一个 skill = 该 skill 在它的 skill 目录（`~/.claude
 - **关键**：复用 `intake`（单条分类器的批量版）+ **来源适配器**（Obsidian vault / Notion 导出 / 纯 md 文件夹 / Apple Notes 导出…）；幂等 + dry-run + 审批闸门；模糊的进隔离区，**不批量塞垃圾**。
 
 **完整 init 流程（别人 clone 引擎后）**：
-1. 拿引擎：`git clone`（agent-native 主路径）。可选：将来提供 `npx create-substrate` 薄壳。
-2. **`substrate-bootstrap` skill 脚手架**（或可选的薄 `substrate init` CLI）：把 `template/` 拷成新实例仓库（治理模板、空 zone、skills 结构、.gitignore、SUBSTRATE_VERSION）；交互填占位（实例名、用哪些 runtime、先开哪些 zone）。
+1. 拿引擎：`git clone`（agent-native 主路径）。
+2. **`substrate-bootstrap` skill 脚手架**：把 `template/` 拷成新实例仓库（治理模板、空 zone、skills 结构、.gitignore、SUBSTRATE_VERSION）；交互填占位（实例名、用哪些 runtime、先开哪些 zone）。
 3. 用户 `git init` 自己的实例 + 推到**自己的**私有远程（engine 与 instance 是两个仓库）。
 4. **可选：`substrate import <source>`** 把已有内容搬进来（本节）。
 5. agent 跑 `substrate-bootstrap`：读宪法/zones → 配本地身份 → `substrate-sync` 装参考 skill 到 runtime。
@@ -240,7 +239,7 @@ Claude Code「用」一个 skill = 该 skill 在它的 skill 目录（`~/.claude
   - **doctor 实现约束（自检 `examples/minimal` 时已踩中、验证过）**：① **不假设 PyYAML**——frontmatter 用 python3 标准库做受限子集解析，或声明 PyYAML 为可选依赖、缺失时降级；② 抽 `[[wikilink]]` 集合**前必须先剥离 inline code（反引号）与 fenced code block**，否则教学/示例页里举例的 `[[...]]` 会被误判断链；③ 孤儿 / frontmatter 合规检查**豁免** `governance/*` 与 README/索引/分片这类结构页。
 - **P2 准入与导入**：`substrate-intake`（分类+守门）+ `substrate-import`（含 generic-md / obsidian 来源适配器）；`_incoming` 隔离/晋升跑通。
 - **P3 迁移机制**：`migrations/` + `substrate-migrate`；写第一个真实迁移并验证 + 回滚 + 多机器幂等。
-- **P4 适配器（+ 可选薄 CLI）**：`adapters/*` 接口定义——**先做 `generic-filesystem` + `claude-code`**，等第二个 runtime 真正逼出抽象再扩（codex/hermes/obsidian）。CLI **非必需、后置**：operations 第一公民是 skill，确定性靠 `substrate-doctor` skill **内嵌零安装 shell**（grep/sort/python3），不依赖 Node/Python 运行时（见 `cli/README.md`）。`examples/minimal` 已在 P0 立起，这里补到能过 doctor。
+- **P4 适配器**：`adapters/*` 接口定义——**先做 `generic-filesystem` + `claude-code`**，等第二个 runtime 真正逼出抽象再扩（codex/obsidian 等）。**无 CLI**：operations 第一公民是 skill；确定性逻辑就是**可直接跑的脚本**（`doctor.py` / `sync.py`），CI / 无 agent 直接跑脚本即可，不需要 `substrate` 壳。`examples/minimal` 已在 P0 立起，这里补到能过 doctor。
 - **P5 收尾 skill**：`collections` / `memory` / `todo`。
 
 ---

@@ -79,7 +79,6 @@ substrate/
 ├── skills/              # ★ 引擎参考 skill 套件（substrate-*，见 skills/README.md；P1+ 逐个实现）
 ├── adapters/            # ★ 可插拔 runtime 适配器（声明式：装哪/怎么探测/清单存哪）
 ├── migrations/          # ★ 版本迁移（P3）
-├── cli/                 # 可选薄壳（skills-first；非必需，后置）
 └── examples/minimal/    # 最小可跑示例 instance（中立假数据）
 ```
 
@@ -98,7 +97,7 @@ substrate/
 | 批量导入已有内容 | `substrate-import` |
 | 跨引擎版本安全迁移 | `substrate-migrate` |
 
-> doctor / migrate 的**确定性**靠 skill **内嵌零安装 shell**（grep/sort/comm + python3 标准库），不靠二进制。可选的薄 `substrate` CLI 后置，仅给 CI/无 agent 场景（见 `cli/README.md`）。
+> doctor / migrate 的**确定性**靠 skill **内嵌零安装 shell**（grep/sort/comm + python3 标准库），不靠二进制。CI / 无 agent 场景**直接跑脚本**（`doctor.py` / `sync.py`）即可——**没有** `substrate` CLI 这层壳。
 
 ---
 
@@ -121,7 +120,7 @@ substrate/
 - [ ] **P1**：核心闭环 `substrate-curator/sync/doctor/bootstrap`，跑通 clone→bootstrap→装 skill→读写→doctor 通过
 - [ ] **P2**：准入与导入（`substrate-intake` / `substrate-import` + 来源适配器）
 - [ ] **P3**：迁移机制（`migrations/` + `substrate-migrate`，含回滚 + 多机幂等）
-- [ ] **P4**：适配器（先 generic-filesystem + claude-code）+ 可选薄 CLI
+- [ ] **P4**：适配器（先 generic-filesystem + claude-code）
 - [ ] **P5**：收尾 skill（collections / memory / todo）
 - [ ] 公开前 gate：LICENSE 定稿
 
