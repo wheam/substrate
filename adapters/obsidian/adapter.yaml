@@ -1,0 +1,44 @@
+# adapter.yaml — obsidian（视图层，非 skill runtime）
+# 见 BUILD-PLAN §11。Obsidian 不是 agent runtime——它是「视图层」，agent 才是「维护层」。
+# 所以本 adapter **不声明 skill_install / detect / local_manifest**；它只放「锦上添花」的工具专属配置。
+# 解析约定同引擎其它契约（python3 标准库正则可读，不假设 PyYAML）。
+
+adapter: obsidian
+kind: view-layer              # ⚠️ 不是 skill-runtime：不往任何目录装 skill；不进 skill 的 target_runtimes
+# Obsidian 本就读「一堆带 [[wikilink]] 的 md 文件夹」，所以任意 Substrate 实例今天就能直接用它打开读写，零迁移。
+# 兼容靠开放格式（md + YAML frontmatter + [[wikilinks]] + CSV/JSONL），不靠专属集成。
+
+# ── 推荐的 vault 设置 ─────────────────────────────────────
+vault:
+  # 把仓库根当 vault 根打开即可（实例仓库根 = vault 根）。
+  open_as_vault: "instance repo root"
+  # 减噪：把这些「非给人读的内容」目录加进 Obsidian「Files & Links → Excluded files」。
+  # 它们是治理/执行面内务，不该污染 graph 视图与全库搜索。
+  excluded_files:
+    - "governance/"
+    - "skills/_incoming/"     # 回流隔离区（未过 admission 的可执行内容）
+    - "skills/_registry.md"   # 第三方 skill 指针清单
+    - "raw/"                  # 原始素材只读归档
+    - ".cache/"
+    - "generated/"
+  # graph 视图：建议按 frontmatter `type` 着色分组，弱化 README 索引页的视觉权重。
+  graph:
+    group_by: "frontmatter.type"
+    deemphasize: ["README.md", "_*"]
+
+# ── 每设备布局：不入库（多设备会冲突）────────────────────
+# .obsidian/workspace*.json 是每台机各自的窗口布局，跨机会冲突，必须 gitignore。
+per_device_gitignore:
+  - ".obsidian/workspace.json"
+  - ".obsidian/workspace-mobile.json"
+gitignored_by_template: true   # template/.gitignore 已含上述两条
+
+# ── 明确不做的事 ──────────────────────────────────────────
+not_a_skill_runtime: >
+  Obsidian 不发现/不执行 skill，也不参与 substrate-sync 的选择性安装；
+  不要把 'obsidian' 写进任何 skill 的 target_runtimes，也不要把它当 fleet device 的 runtime。
+  它只是打开同一个 git 仓库的另一个视图——agent 维护内容，人用 Obsidian 浏览/手改。
+
+notes: >
+  设计立场：Substrate 不绑定任何编辑器，只承诺开放格式。本 adapter 纯属可选「锦上添花」，
+  删掉它实例照常工作。其它 markdown 工具（Logseq、纯编辑器、grep、RAG）同理即插即用。

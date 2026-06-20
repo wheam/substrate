@@ -235,12 +235,12 @@ Claude Code「用」一个 skill = 该 skill 在它的 skill 目录（`~/.claude
 ## 15. 开发路线（建议给开发 session）
 
 - **P0 契约与模板**：定稿 schema（4 个 + `zone.schema` 补 `graduation`）；写 `docs/concepts.md` 术语表；填实 `template/`（governance 五件套 + 各 zone README 含 **Agent Packet**（两级索引）+ `skills/README`+`_registry` + `fleet/` + 入口 README + .gitignore + SUBSTRATE_VERSION）；立起 `examples/minimal`（中立假数据）当 doctor 靶子。〔已完成〕
-- **P1 核心闭环**：`substrate-curator` + `substrate-sync` + `substrate-doctor` 最小版 + `substrate-bootstrap`；跑通「clone→bootstrap→装 skill→读写一篇→doctor 通过」。
+- **P1 核心闭环**：`substrate-curator` + `substrate-sync` + `substrate-doctor` 最小版 + `substrate-bootstrap`；跑通「clone→bootstrap→装 skill→读写一篇→doctor 通过」。〔已完成〕
   - **doctor 实现约束（自检 `examples/minimal` 时已踩中、验证过）**：① **不假设 PyYAML**——frontmatter 用 python3 标准库做受限子集解析，或声明 PyYAML 为可选依赖、缺失时降级；② 抽 `[[wikilink]]` 集合**前必须先剥离 inline code（反引号）与 fenced code block**，否则教学/示例页里举例的 `[[...]]` 会被误判断链；③ 孤儿 / frontmatter 合规检查**豁免** `governance/*` 与 README/索引/分片这类结构页。
-- **P2 准入与导入**：`substrate-intake`（分类+守门）+ `substrate-import`（含 generic-md / obsidian 来源适配器）；`_incoming` 隔离/晋升跑通。
-- **P3 迁移机制**：`migrations/` + `substrate-migrate`；写第一个真实迁移并验证 + 回滚 + 多机器幂等。
-- **P4 适配器**：`adapters/*` 接口定义——**先做 `generic-filesystem` + `claude-code`**，等第二个 runtime 真正逼出抽象再扩（codex/obsidian 等）。**无 CLI**：operations 第一公民是 skill；确定性逻辑就是**可直接跑的脚本**（`doctor.py` / `sync.py`），CI / 无 agent 直接跑脚本即可，不需要 `substrate` 壳。`examples/minimal` 已在 P0 立起，这里补到能过 doctor。
-- **P5 收尾 skill**：`collections` / `memory` / `todo`。
+- **P2 准入与导入**：`substrate-intake`（分类+守门）+ `substrate-import`（含 generic-md / obsidian 来源适配器）；`_incoming` 隔离/晋升跑通。〔已完成〕
+- **P3 迁移机制**：`migrations/` + `substrate-migrate`；写第一个真实迁移并验证 + 回滚 + 多机器幂等。〔已完成：示例迁移 0001 + 引擎自我保护护栏〕
+- **P4 适配器**：`adapters/*` 接口定义——**先做 `generic-filesystem` + `claude-code`**，等第二个 runtime 真正逼出抽象再扩（codex/obsidian 等）。**无 CLI**：operations 第一公民是 skill；确定性逻辑就是**可直接跑的脚本**（`doctor.py` / `sync.py`），CI / 无 agent 直接跑脚本即可，不需要 `substrate` 壳。`examples/minimal` 已在 P0 立起，这里补到能过 doctor。〔已完成：声明式 adapter 接口；sync 自动读 adapter 取 target 列为后续小项〕
+- **P5 收尾 skill**：`collections` / `memory` / `todo`。〔已完成〕
 
 ---
 

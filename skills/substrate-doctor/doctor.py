@@ -34,6 +34,7 @@ def rel(root, p): return os.path.relpath(p, root)
 def is_structural(root, p):
     r = rel(root, p).replace(os.sep, "/")
     if os.path.basename(p) == "README.md": return True
+    if r == "TODO.md": return True   # 实例根的待办 checklist：无 frontmatter/入链，是结构页（由 substrate-todo 维护）
     if r == "governance" or r.startswith("governance/"): return True
     if os.path.basename(p).startswith("_"): return True
     if any(seg.startswith("by-") for seg in r.split("/")[:-1]): return True

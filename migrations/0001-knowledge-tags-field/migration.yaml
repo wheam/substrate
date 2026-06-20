@@ -1,0 +1,30 @@
+# 契约见 engine schemas/migration.schema.yaml
+# ── 这是供 fork 者参考的【示例迁移】──────────────────────────────────────────
+# 它演示一个真实可跑、幂等、可验证、可回滚的 vN→vN+1 变换的完整形态，
+# 让你照着写自己的迁移。变换本身刻意选了最无害的一种：给缺 `tags` 字段的
+# 知识页补上 `tags: []`（追加式，不改任何已有内容，不删任何东西）。
+id: 0001-knowledge-tags-field
+from_version: "0.1.0"
+to_version: "0.2.0"
+title: 给缺 tags 字段的知识页补 tags:[]
+description: >-
+  【示例迁移，供 fork 者参考】把 v0.1.0 实例升到 v0.2.0：v0.2.0 起约定每个
+  knowledge 页的 frontmatter 都带 `tags` 字段（便于后续按标签检索/毕业）。
+  本迁移扫描 knowledge/ 下的内容页，给 frontmatter 里缺 `tags:` 的页补一行
+  `tags: []`，已有的不动。纯追加，不触碰正文与其它字段。删了再跑也安全（幂等）。
+risk_level: low
+idempotent: true
+steps:
+  - action: >-
+      扫描 knowledge/ 下所有 .md 内容页（豁免 README/索引/_前缀/by-* 分片），
+      对 YAML frontmatter 里没有 `tags:` 键的页，在 frontmatter 块内追加一行 `tags: []`。
+    verify: >-
+      knowledge/ 下每个内容页的 frontmatter 都含 `tags:` 键
+      （apply.py 以 --check 模式自检：返回 0 表示全部已补齐）。
+preserves:
+  - knowledge 内容页的数量不变（只改 frontmatter，不增删文件）
+  - 每页正文与已有 frontmatter 字段（title/created/updated/type/已有 tags）逐字不变
+  - wikilink 图与 zone 注册不变
+rollback: >-
+  git reset --hard pre-migrate-0.1.0（substrate-migrate 在应用前已打此 tag）。
+  本迁移纯追加，回滚即丢弃所补的 tags 行，无数据损失。

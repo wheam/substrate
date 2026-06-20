@@ -1,0 +1,41 @@
+# adapter.yaml — generic-filesystem（兜底适配器）
+# 把引擎的抽象动作（装 skill / 探测 runtime / 写本地清单）落到「纯文件系统」上。
+# 这是**没有特定 runtime 时的兜底**：所有路径都可配置，不假设任何工具存在。
+# 解析约定与引擎其它契约一致：本文件顶部就是可解析 YAML（python3 标准库正则解析，不假设 PyYAML）。
+
+adapter: generic-filesystem
+kind: skill-runtime          # skill-runtime = 引擎把 skill 装进它的 skill 目录；view-layer = 只读视图，不装 skill
+runtime: generic-filesystem  # 这个名字可写进 skill 的 target_runtimes / fleet 的 runtimes（也可用 'all' 通配）
+
+# ── skill 装到哪 ──────────────────────────────────────────
+# 兜底没有规定目录，所以**路径来自调用方**，由占位符声明、由人/上层 skill 填。
+skill_install:
+  format: directory          # 每个 skill = 一个目录，内含 SKILL.md（+ 可选脚本）；与引擎 skills/ 同构
+  # 安装目录：占位符，必须由调用方提供（环境变量优先，否则显式传参）。
+  target: "${SUBSTRATE_SKILL_DIR}"
+  target_fallback: "./.substrate/skills"   # 未设环境变量时的相对默认（相对调用方 CWD）
+  # 跑 substrate-sync 的方式（sync.py 与 CWD 无关，路径全参数化）：
+  sync_command: "python3 <substrate-sync>/sync.py --src <instance>/skills --target ${SUBSTRATE_SKILL_DIR} --runtime generic-filesystem"
+  # 多 runtime 变体：sync 选中本 runtime 时优先取 SKILL.generic-filesystem.md，否则落 SKILL.md（见 sync.py）。
+  variant_suffix: ".generic-filesystem.md"
+
+# ── 怎么探测本机 runtime / 角色 ───────────────────────────
+# 兜底没有可执行体可探测，所以判定全靠**显式配置**，不做魔法猜测（坏输入应优雅退出，不臆测）。
+detect:
+  method: explicit-config    # 不自动嗅探；以下任一为真即视为本 runtime 可用
+  present_if:
+    - "环境变量 SUBSTRATE_SKILL_DIR 已设"
+    - "fleet/ 里本机 device 的 runtimes 含 generic-filesystem"
+  role_source: "fleet/ 里本机 device 的 role 字段（main-dev / headless-dev / migration_leader / read-only）"
+
+# ── 本地安装清单存哪（不入库）─────────────────────────────
+local_manifest:
+  # sync.py 默认把 installed-skills.json 写到 --target 目录；可用 --manifest 覆盖。
+  path: "${SUBSTRATE_SKILL_DIR}/installed-skills.json"
+  committed: false           # local-only：execution-plane 的本地状态，永不入库
+  gitignored_by_template: true  # template/.gitignore 已含 installed-skills.json
+
+notes: >
+  这是接入任意「能读写文件夹」的 agent 的最小契约：给一个目录、跑 sync、读本地清单即可。
+  当某个真实 runtime（claude-code / codex / hermes …）逼出更具体的路径约定时，照此文件克隆一份专属 adapter，
+  把 ${SUBSTRATE_SKILL_DIR} 换成该 runtime 的固定目录、把 detect 换成可执行体探测。

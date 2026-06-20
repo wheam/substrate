@@ -117,11 +117,11 @@ substrate/
 
 - [x] 目录骨架 + 结构设计
 - [x] **P0**：4 个 schema 定稿（+ `zone.schema` graduation）；`docs/concepts.md` 术语表；`template/` 填实（governance 五件套 + 各 zone README 含 Agent Packet + skills README/_registry + fleet）；`examples/minimal` 立起；`ENGINE_VERSION`
-- [ ] **P1**：核心闭环 `substrate-curator/sync/doctor/bootstrap`，跑通 clone→bootstrap→装 skill→读写→doctor 通过
-- [ ] **P2**：准入与导入（`substrate-intake` / `substrate-import` + 来源适配器）
-- [ ] **P3**：迁移机制（`migrations/` + `substrate-migrate`，含回滚 + 多机幂等）
-- [ ] **P4**：适配器（先 generic-filesystem + claude-code）
-- [ ] **P5**：收尾 skill（collections / memory / todo）
+- [x] **P1**：核心闭环 `substrate-curator/sync/doctor/bootstrap`，跑通 clone→bootstrap→装 skill→读写→doctor 通过
+- [x] **P2**：准入与导入（`substrate-intake` / `substrate-import` + generic-md/obsidian 来源适配器）
+- [x] **P3**：迁移机制（`migrations/` + `substrate-migrate`，含回滚 + 多机幂等 + 引擎自我保护）
+- [x] **P4**：适配器（generic-filesystem + claude-code 做实，codex/hermes/obsidian 声明）
+- [x] **P5**：收尾 skill（collections / memory / todo）
 - [ ] 公开前 gate：LICENSE 定稿
 
 > 开发依据见 `docs/BUILD-PLAN.md`（P0–P5 完整路线）。

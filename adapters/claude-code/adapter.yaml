@@ -1,0 +1,38 @@
+# adapter.yaml — claude-code
+# 把引擎抽象动作落到 Claude Code 的真实路径：skill 装进 ~/.claude/skills/。
+# 见 BUILD-PLAN §6.2。解析约定同引擎其它契约（python3 标准库正则可读，不假设 PyYAML）。
+
+adapter: claude-code
+kind: skill-runtime
+runtime: claude-code          # 写进 skill 的 target_runtimes / fleet device 的 runtimes 的值
+
+# ── skill 装到哪 ──────────────────────────────────────────
+# Claude Code「用」一个 skill = 该 skill 在它的 skill 目录里即可自动发现并调用。
+skill_install:
+  format: directory           # 每个 skill = 一个含 SKILL.md 的目录；与引擎 skills/ 同构
+  target: "~/.claude/skills"  # Claude Code 用户级 skill 目录
+  target_env_override: "CLAUDE_SKILL_DIR"   # 若设此环境变量则优先（便于测试/隔离）
+  sync_command: "python3 <substrate-sync>/sync.py --src <instance>/skills --target ~/.claude/skills --runtime claude-code"
+  # 多 runtime 变体：sync 选中本 runtime 时优先取 SKILL.claude-code.md，否则落 SKILL.md（见 sync.py）。
+  variant_suffix: ".claude-code.md"
+  # 鸡生蛋：首次先把 substrate-bootstrap + substrate-sync 种子进 target，再跑 sync 自助装齐其余（BUILD-PLAN §6.2 步骤 2）。
+  seed_skills: [substrate-bootstrap, substrate-sync]
+
+# ── 怎么探测本机 runtime / 角色 ───────────────────────────
+detect:
+  method: path-probe          # 探测可执行体 + 用户目录是否存在
+  present_if_any:
+    - "PATH 中存在可执行 `claude`"
+    - "目录 ~/.claude/ 存在"
+  role_source: "fleet/ 里本机 device 的 role 字段（main-dev / headless-dev / migration_leader / read-only）"
+  # 谁跑 sync：有管家的机器由管家统一装到各 runtime；纯 CC 机器直接自助跑 sync.py（BUILD-PLAN §6.2 备注）。
+
+# ── 本地安装清单存哪（不入库）─────────────────────────────
+local_manifest:
+  path: "~/.claude/skills/installed-skills.json"   # sync.py 默认写入 --target；--manifest 可覆盖
+  committed: false            # local-only：本机状态，永不入库
+  gitignored_by_template: true   # template/.gitignore 已含 installed-skills.json
+
+notes: >
+  Claude Code 是 skill 的一等 runtime（参考 skill 的 target_runtimes 默认就是 [claude-code]）。
+  装进 ~/.claude/skills/ 后，CC 即可发现并调用全部适用 skill；下次跑 sync 据本地清单增量更新。

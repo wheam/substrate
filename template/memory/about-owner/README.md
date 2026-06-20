@@ -24,6 +24,7 @@
 ```yaml
 ---
 title: 记忆标题
+type: memory
 owner: <你的名字>
 created: YYYY-MM-DD
 updated: YYYY-MM-DD

@@ -1,0 +1,36 @@
+# adapter.yaml — codex（最小但真实）
+# Codex 把 skill 装进它的 skill 目录，并通过 AGENTS.md 暴露上手协议。
+# 接口未定稿（adapters/README.md）：等第二个真实 runtime 逼出抽象再固化。
+# 解析约定同引擎其它契约（python3 标准库正则可读，不假设 PyYAML）。
+
+adapter: codex
+kind: skill-runtime
+runtime: codex                # 写进 skill 的 target_runtimes / fleet device 的 runtimes 的值
+
+# ── skill 装到哪 ──────────────────────────────────────────
+skill_install:
+  format: directory           # 每个 skill = 一个含 SKILL.md 的目录；与引擎 skills/ 同构
+  target: "~/.codex/skills"   # Codex 用户级 skill 目录
+  target_env_override: "CODEX_SKILL_DIR"
+  # Codex 读 AGENTS.md 作上手协议：本仓库根的 AGENTS.md 是 CLAUDE.md 的镜像（同步维护）。
+  agents_md: "AGENTS.md"
+  sync_command: "python3 <substrate-sync>/sync.py --src <instance>/skills --target ~/.codex/skills --runtime codex"
+  variant_suffix: ".codex.md"
+
+# ── 怎么探测本机 runtime / 角色 ───────────────────────────
+detect:
+  method: path-probe
+  present_if_any:
+    - "PATH 中存在可执行 `codex`"
+    - "目录 ~/.codex/ 存在"
+  role_source: "fleet/ 里本机 device 的 role 字段"
+
+# ── 本地安装清单存哪（不入库）─────────────────────────────
+local_manifest:
+  path: "~/.codex/skills/installed-skills.json"
+  committed: false
+  gitignored_by_template: true   # template/.gitignore 已含 installed-skills.json
+
+notes: >
+  最小声明：路径与 AGENTS.md 钩子为占位约定，待在真实 Codex 机上验证后固化。
+  在被验证前，可退回 generic-filesystem 适配器（显式给 --target）。
