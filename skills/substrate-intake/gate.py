@@ -20,8 +20,9 @@
 
 设计约束（对齐引擎其它脚本）:
   - 零依赖、CWD 无关（路径全参数化）、坏输入优雅退出不崩。
-  - 容忍 BOM / 前导空行 / frontmatter 内行尾注释。
-  - **fail-closed**：任何无法确定为「纯读写 markdown」的情形都倒向 audit，绝不误放危险件。
+  - 容忍 BOM / 前导空行 / frontmatter 内行尾注释 / 列表项间空行或注释行。
+  - **fail-closed**：任何无法**完整且无歧义**解析为「纯读写 markdown」的情形都倒向 audit，
+    绝不误放危险件——包括 capabilities 重复声明、块内夹非列表行、写了键却无项等。
 """
 import sys, os, re
 
@@ -31,6 +32,7 @@ DANGEROUS = {
     "secrets", "modify-skills", "modify-governance",
 }
 # 已知安全的 capability 白名单（只读写 markdown 一类）。未知 capability 一律视为危险。
+# 词表见 governance/admission.md「capability 词表」与 skills/substrate-intake/SKILL.md。
 SAFE = {"read", "write", "read-markdown", "write-markdown", "markdown"}
 
 
@@ -57,21 +59,42 @@ def scalar(fm, key):
     return v.strip("'\"") or None
 
 
-def listfield(fm, key):
-    """读列表字段：支持 [a, b] 内联式与多行 `- a` 块式。无则 []。"""
-    m = re.search(rf"(?m)^{key}:[ \t]*\[(.*?)\]", fm, re.S)   # re.S：容忍多行 [a,\n b] 流式列表
+def parse_caplist(fm, key):
+    """解析 capabilities 列表，**fail-closed**。返回 (items, status)，
+    status ∈ {ok, absent, empty, malformed, duplicate}:
+      - inline `[a, b]`（含空 `[]`）→ ok。
+      - 块式 `- a` 多行：容忍行间**空行/注释**，收集**全部**项；
+        遇到比 key 更深缩进但不是 `- 项` 的行（畸形）→ malformed；块内零项 → empty。
+      - 同名 key 出现一个以上 → duplicate（真实 YAML 后者覆盖；守门不赌，转人工）。
+    旧实现的 bug：块内一个空行或注释会让正则停在那里、丢掉后续 `- shell`，
+    把危险件误判为安全 → fail-OPEN。本实现逐行收集，杜绝该绕过。"""
+    if len(re.findall(rf"(?m)^[ \t]*{key}[ \t]*:", fm)) > 1:
+        return [], "duplicate"
+    # 内联 [a, b]（容忍多行流式 [a,\n b]）
+    m = re.search(rf"(?m)^[ \t]*{key}[ \t]*:[ \t]*\[(.*?)\]", fm, re.S)
     if m:
-        return [x.strip().strip("'\"") for x in m.group(1).split(",") if x.strip()]
-    m = re.search(rf"(?m)^{key}:[ \t]*\n((?:[ \t]*-[ \t]*.+\n?)+)", fm)
-    if m:
-        out = []
-        for line in m.group(1).splitlines():
-            line = re.sub(r"^[ \t]*-[ \t]*", "", line)
-            line = re.sub(r"\s+#.*$", "", line).strip().strip("'\"")
-            if line:
-                out.append(line)
-        return out
-    return []
+        return [x.strip().strip("'\"") for x in m.group(1).split(",") if x.strip()], "ok"
+    # 块式 header
+    m = re.search(rf"(?m)^([ \t]*){key}[ \t]*:[ \t]*$", fm)
+    if not m:
+        return [], "absent"
+    key_indent = len(m.group(1).replace("\t", "    "))
+    out = []
+    for line in fm[m.end():].split("\n"):
+        if line.strip() == "":
+            continue                              # 空行：容忍，块未结束
+        if line.lstrip().startswith("#"):
+            continue                              # 注释行：容忍
+        indent = len(line[:len(line) - len(line.lstrip())].replace("\t", "    "))
+        if indent <= key_indent:
+            break                                 # 退缩进 → 块结束
+        mi = re.match(r"-[ \t]*(.+)$", line.strip())
+        if not mi:
+            return out, "malformed"               # 更深缩进但非列表项 → 畸形 → fail-closed
+        val = re.sub(r"\s+#.*$", "", mi.group(1)).strip().strip("'\"")
+        if val:
+            out.append(val)
+    return (out, "ok") if out else (out, "empty")
 
 
 def classify(caps):
@@ -118,21 +141,26 @@ def main(argv):
         print(f"[ERROR] {name}: manifest 缺必填字段 name，转人工")
         return 2
 
-    cap_present = re.search(r"(?m)^[ \t]*capabilities[ \t]*:", fm) is not None
-    explicit_empty = re.search(r"(?m)^[ \t]*capabilities[ \t]*:[ \t]*\[[ \t]*\][ \t]*$", fm) is not None
-    caps = listfield(fm, "capabilities")
+    caps, status = parse_caplist(fm, "capabilities")
     declared = (scalar(fm, "risk_level") or "").lower() or None
 
+    shown = caps if caps else ("[] (显式空)" if status == "ok" else f"({status})")
     print(f"substrate-intake gate: {name}")
-    print(f"  capabilities: {caps if caps else ('[] (显式空)' if explicit_empty else '(未声明/无法解析)')}")
+    print(f"  capabilities: {shown}")
     print(f"  自报 risk_level: {declared or '(未声明)'}  (仅供参考，不参与判定)")
 
-    # fail-closed：能力声明缺失或无法解析 → 一律 audit（绝不误放危险件）。
-    if not cap_present:
+    # fail-closed：任何无法「完整、无歧义」判为纯安全的情形 → audit（绝不误放危险件）。
+    if status == "absent":
         print("  → AUDIT（转人工）：未声明 capabilities，无法判定安全。要自动晋升须显式写 `capabilities: []`（或安全能力）。")
         return 1
-    if not caps and not explicit_empty:
-        print("  → AUDIT（转人工）：capabilities 无法解析（标量/多行格式异常等）——fail-closed，转人工。")
+    if status == "duplicate":
+        print("  → AUDIT（转人工）：capabilities 键重复声明——真实 YAML 后者覆盖，守门不赌，转人工。")
+        return 1
+    if status == "malformed":
+        print("  → AUDIT（转人工）：capabilities 列表格式异常（块内夹非列表项行等），无法可靠解析——fail-closed。")
+        return 1
+    if status == "empty":
+        print("  → AUDIT（转人工）：写了 capabilities 键但无任何项（YAML 解析为 null，非空列表）——fail-closed。要自动晋升请写 `capabilities: []`。")
         return 1
 
     decision, dangerous, unknown = classify(caps)

@@ -213,7 +213,7 @@ Claude Code「用」一个 skill = 该 skill 在它的 skill 目录（`~/.claude
 | skill | 作用 |
 |---|---|
 | `substrate-curator` | 读写/维护知识页 + 执行宪法（**取代旧的 `personal-wiki` skill**） |
-| `substrate-sync` | 按角色/registry 选择性安装到各 runtime + 本地清单 + 回流到 `_incoming` |
+| `substrate-sync` | 按 skill 的 `target_runtimes`/registry 选择性安装到各 runtime（fail-closed，不 install-all）+ 写本地清单。角色维度由上层 agent 决定喂哪些 skill；回流到 `_incoming` 由 `substrate-intake` 守门，不是 sync 的职责。 |
 | `substrate-intake` | 内容分类器 + 自动回流守门（admission，§7） |
 | `substrate-bootstrap` | 新 agent 自举 |
 | `substrate-doctor` | 防退化体检 + 毕业阈值监测 + 迁移测试套件 |

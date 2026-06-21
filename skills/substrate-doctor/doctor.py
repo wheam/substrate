@@ -7,12 +7,14 @@
 设计约束（见引擎 docs/BUILD-PLAN.md §15 P1）:
   - 不假设 PyYAML：frontmatter / zones / registry 用受限子集正则解析。
   - 抽 [[wikilink]] 前先剥离 inline code 与 fenced code block。
-  - 孤儿 / frontmatter 检查豁免 governance/* 与 README/索引/分片结构页。
+  - 孤儿 / frontmatter 检查豁免 governance/* 与 README/索引/分片结构页，
+    以及 skills/*（其顶部是 skill-manifest，不是内容页；skill 里的 [[..]] 是示例，不计入内容图）。
   - 对真实数据要 robust：BOM / 非 UTF-8 / 空 CSV / 尾空行 / 重名 / prose 数字都不能误判或崩。
 """
 import sys, os, re, glob, csv
 
 REQUIRED_FRONTMATTER = ["title", "created", "updated", "type"]
+MANIFEST_REQUIRED = ["name", "target_runtimes", "risk_level"]   # 见 schemas/skill-manifest.schema.yaml
 errors, warnings, advice = [], [], []
 def err(m):  errors.append(m)
 def warn(m): warnings.append(m)
@@ -31,11 +33,17 @@ def strip_code(t):
 
 def rel(root, p): return os.path.relpath(p, root)
 
+def under(root, p, top):
+    """p 是否在 root 下的 top/ 子树里（或就是 top）。"""
+    r = rel(root, p).replace(os.sep, "/")
+    return r == top or r.startswith(top + "/")
+
 def is_structural(root, p):
     r = rel(root, p).replace(os.sep, "/")
     if os.path.basename(p) == "README.md": return True
     if r == "TODO.md": return True   # 实例根的待办 checklist：无 frontmatter/入链，是结构页（由 substrate-todo 维护）
-    if r == "governance" or r.startswith("governance/"): return True
+    if under(root, p, "governance"): return True
+    if under(root, p, "skills"): return True   # skill 目录顶部是 manifest，不是内容页（单独 lint，见检查 8）
     if os.path.basename(p).startswith("_"): return True
     if any(seg.startswith("by-") for seg in r.split("/")[:-1]): return True
     return False
@@ -69,24 +77,33 @@ def main(root):
     allfiles = set(mds)
     texts = {}
     for m in mds:
-        t = read_text(m)
-        if t is None:
-            err(f"无法读取（非 UTF-8/损坏）  {rel(root,m)}"); t = ""
-        texts[m] = t
+        try:
+            raw = open(m, "rb").read()
+        except Exception:
+            err(f"无法读取  {rel(root,m)}"); texts[m] = ""; continue
+        try:
+            texts[m] = raw.decode("utf-8-sig")          # 严格解码：能发现真正的非 UTF-8
+        except UnicodeDecodeError:
+            warn(f"非 UTF-8 编码（按替换字符解析，可能有乱码）  {rel(root,m)}")
+            texts[m] = raw.decode("utf-8-sig", errors="replace")
     base = {}
     for m in mds:
         base.setdefault(os.path.splitext(os.path.basename(m))[0], []).append(m)
 
     def resolve(tgt):
-        """返回命中文件列表；优先按相对路径，再按 basename。"""
+        """返回命中文件列表。路径式（含 /）必须按路径解析，不退回 basename
+        （否则写错路径的链接会被 basename 兜底成功而漏判断链）。"""
         if "/" in tgt:
             cand = os.path.normpath(os.path.join(root, tgt if tgt.endswith(".md") else tgt + ".md"))
-            if cand in allfiles: return [cand]
+            return [cand] if cand in allfiles else []
         return base.get(re.sub(r"\.md$", "", os.path.basename(tgt)), [])
 
-    # 1) 断链 + 入链统计（剥 code；排除自链；重名告警）
+    # 1) 断链 + 入链统计（剥 code；排除自链；重名告警）。
+    #    skills/ 里的 [[..]] 是示例/说明，不计入内容图：既不报断链，也不算入链。
     inbound = {m: 0 for m in mds}
     for m in mds:
+        if under(root, m, "skills"):
+            continue
         for tgt in wikilink_targets(texts[m]):
             hits = resolve(tgt)
             if not hits:
@@ -116,7 +133,9 @@ def main(root):
     # 4) 索引漂移（同目录有 README.md 时，内容兄弟页须以整词/链接登记在该 README）
     def registered(readme_text):
         names = {re.sub(r"\.md$", "", os.path.basename(t)) for t in wikilink_targets(readme_text)}
-        names |= {re.sub(r"\.md$", "", os.path.basename(p)) for p in re.findall(r"[\w./-]+\.md", readme_text)}
+        # 整词匹配 .md 路径：尾随 lookahead 排除 page.md.bak 这类子串误判为已登记
+        names |= {re.sub(r"\.md$", "", os.path.basename(p))
+                  for p in re.findall(r"[\w./-]+\.md(?![\w.])", readme_text)}
         return names
     for m in mds:
         if is_structural(root, m): continue
@@ -126,32 +145,39 @@ def main(root):
             if bn not in registered(texts.get(readme) or read_text(readme) or ""):
                 err(f"索引漂移  {rel(root,m)} 未登记在 {rel(root,readme)}")
 
-    # 5) 收藏计数漂移（递归找 data.csv；只认页面里**粗体**声明的计数，避免 prose 误报）
+    # 5) 收藏计数漂移（递归找 data.csv；只校验与 data.csv **同目录**的索引页粗体计数 == 主表行数。
+    #    分类分片在 by-*/ 子目录里，天然是子集，不与主表总数比——避免对多类别分片误报。）
     for csvf in glob.glob(root + "/collections/**/data.csv", recursive=True):
         n = csv_rows(csvf)
         cdir = os.path.dirname(csvf)
-        for page in glob.glob(cdir + "/**/*.md", recursive=True):
+        for page in glob.glob(cdir + "/*.md"):
             for claimed in re.findall(r"\*\*\s*(\d+)\s*\*\*\s*(?:条|rows|entries)", texts.get(page) or read_text(page) or ""):
                 if int(claimed) != n:
                     err(f"计数漂移  {rel(root,page)} 声称 {claimed}，但 {rel(root,csvf)} 有 {n} 行")
 
-    # 6) registry pin（缺 pin = ERROR，对齐 SKILL.md 与 registry.schema）
+    # 6) registry pin（缺 pin = ERROR；pin 是 main/master/HEAD 这类移动 ref 却未声明 trusted_floating=ERROR→WARN）
     reg = os.path.join(root, "skills", "_registry.md")
     if os.path.isfile(reg):
         m = re.search(r"```yaml\n(.*?)```", read_text(reg) or "", re.S)
         block = "\n".join(l for l in (m.group(1) if m else "").splitlines() if not l.lstrip().startswith("#"))
         for chunk in re.split(r"(?m)^\s*-\s+name:", block)[1:]:
             name = chunk.splitlines()[0].strip()
-            if "upstream_git_url" in chunk and not re.search(r"(?m)^\s*pin:\s*\S", chunk):
+            if "upstream_git_url" not in chunk:
+                continue
+            pinm = re.search(r"(?m)^\s*pin:\s*(\S+)", chunk)
+            if not pinm:
                 err(f"registry 缺 pin（裸追上游有供应链风险）: {rel(root,reg)} 条目 {name}")
+            elif pinm.group(1).strip("'\"").lower() in ("main", "master", "head") \
+                    and not re.search(r"(?m)^\s*trusted_floating:\s*true", chunk):
+                warn(f"registry pin 追踪移动 ref（{pinm.group(1)}）却未声明 trusted_floating: true: {rel(root,reg)} 条目 {name}")
 
-    # 7) 毕业阈值（advisory，按 zone 条目解析，id 与阈值同源）
+    # 7) 毕业阈值（advisory，按 zone 条目解析，id 与阈值同源；容忍 rows>N / rows > N）
     zones = os.path.join(root, "governance", "zones.md")
     if os.path.isfile(zones):
         m = re.search(r"```yaml\n(.*?)```", read_text(zones) or "", re.S)
         for chunk in re.split(r"(?m)^\s*-\s+id:", (m.group(1) if m else ""))[1:]:
             zid = chunk.splitlines()[0].strip()
-            gm = re.search(r"graduation:.*?rows>(\d+)", chunk)
+            gm = re.search(r"graduation:.*?rows\s*>\s*(\d+)", chunk)
             if not gm: continue
             thr = int(gm.group(1))
             pm = re.search(r"(?m)^\s*path:\s*(\S+)", chunk)
@@ -160,6 +186,18 @@ def main(root):
                 n = csv_rows(csvf)
                 if n > thr:
                     adv(f"毕业建议  {rel(root,csvf)} 有 {n} 行 > 阈值 {thr}（zone {zid}）：考虑分片/迁移")
+
+    # 8) skills/ 清单 lint（WARN）：committed own-skill 的 SKILL.md 应是合规 manifest（见 skill-manifest.schema）。
+    #    只 lint 一层 skills/<name>/SKILL.md；_前缀目录（_incoming 等）由 substrate-intake 守门，不在此 lint。
+    for sk in sorted(glob.glob(root + "/skills/*/SKILL.md")):
+        if os.path.basename(os.path.dirname(sk)).startswith("_"):
+            continue
+        keys = frontmatter_keys(texts.get(sk) or read_text(sk) or "")
+        if keys is None:
+            warn(f"skill 缺 manifest frontmatter  {rel(root,sk)}（见 skill-manifest.schema）")
+        else:
+            miss = [k for k in MANIFEST_REQUIRED if k not in keys]
+            if miss: warn(f"skill manifest 缺字段  {rel(root,sk)}: {', '.join(miss)}")
 
     print(f"substrate-doctor: {os.path.basename(root)}  ({len(mds)} md 文件)")
     for tag, items in (("ERROR", errors), ("WARN", warnings), ("ADVICE", advice)):

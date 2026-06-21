@@ -25,8 +25,11 @@ import sys, os
 # 直接 `python3 .../collections.py` 时，脚本所在目录在 sys.path[0]，
 # 标准库（csv/argparse 经由 functools）`from collections import ...` 会误中本文件 → 循环导入崩溃。
 # 先把脚本目录从 sys.path 摘掉，再导入标准库，杜绝该陷阱（与 CWD 无关）。
-_here = os.path.dirname(os.path.abspath(__file__))
-sys.path[:] = [p for p in sys.path if os.path.abspath(p or ".") != _here]
+# 用 realpath（解析符号链接）：CPython 把 sys.path[0] 设成脚本目录的 realpath，
+# 而 abspath 不解析符号链接——在 macOS /tmp→/private/tmp 这类符号链接路径下，
+# abspath 比较会失配、摘不掉脚本目录，仍循环导入崩溃。realpath 两边对齐才稳。
+_here = os.path.dirname(os.path.realpath(__file__))
+sys.path[:] = [p for p in sys.path if os.path.realpath(p or ".") != _here]
 import csv, argparse, tempfile
 
 
@@ -119,10 +122,13 @@ def cmd_upsert(args):
     id_idx = header.index("id")
 
     def row_to_record(row):
-        return {header[i]: (row[i] if i < len(row) else "") for i in range(len(header))}
+        rec = {header[i]: (row[i] if i < len(row) else "") for i in range(len(header))}
+        if len(row) > len(header):
+            rec["__overflow__"] = list(row[len(header):])   # 保留超宽（ragged）行的多余单元格，绝不静默丢弃
+        return rec
 
     def record_to_row(rec):
-        return [rec.get(col, "") for col in header]
+        return [rec.get(col, "") for col in header] + list(rec.get("__overflow__", []))
 
     # 按 id 查现有行（去掉全空行；首个匹配为准，其余重复 id 告警）。
     matches = []
@@ -171,16 +177,20 @@ def cmd_upsert(args):
         print(f"  → 写盘后用 `count` 取权威行数并同步页面里的粗体计数（应为 {after_count}）。")
         return 0
 
-    # 原子写：写临时文件再 rename，避免半截文件。
+    # 原子写：写临时文件再 rename，避免半截文件。lineterminator='\n' 保持 LF（不改写成 CRLF）。
     out = [header] + kept
     dest_dir = os.path.dirname(os.path.abspath(args.csv)) or "."
+    tmp = None
     try:
         os.makedirs(dest_dir, exist_ok=True)
         fd, tmp = tempfile.mkstemp(dir=dest_dir, suffix=".csv.tmp")
         with os.fdopen(fd, "w", newline="", encoding="utf-8") as f:
-            csv.writer(f).writerows(out)
+            csv.writer(f, lineterminator="\n").writerows(out)
         os.replace(tmp, args.csv)
     except Exception as e:
+        if tmp and os.path.exists(tmp):        # 失败别把临时文件漏在（受 git 跟踪的）收藏目录里
+            try: os.unlink(tmp)
+            except OSError: pass
         print(f"substrate-collections: 写盘失败: {e}")
         return 2
     print(f"  → 已写 {args.csv}（{after_count} 数据行）。")

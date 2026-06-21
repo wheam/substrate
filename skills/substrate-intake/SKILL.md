@@ -96,7 +96,7 @@ python3 <本 skill 目录>/gate.py <skills/_incoming/某 skill 文件夹>
 | 决策 | 条件 | 退出码 |
 |---|---|---|
 | **PROMOTE**（自动晋升） | **显式声明**了 capabilities（`capabilities: []` 或全在安全白名单内），且**无**危险/未知能力 | 0 |
-| **AUDIT**（转人工） | `capabilities` 含 `shell`/`system`/`network`/`install`/`secrets`/`modify-skills`/`modify-governance` **任一**或白名单外未知能力；**或** capabilities **未声明 / 无法解析**（标量、多行格式异常等） | 1 |
+| **AUDIT**（转人工） | `capabilities` 含 `shell`/`system`/`network`/`install`/`secrets`/`modify-skills`/`modify-governance` **任一**或白名单外未知能力；**或** capabilities **未声明 / 无法可靠解析**（标量、键重复、块内夹非列表项行、写了键却无项等都 fail-closed）。列表项间夹**空行/注释**是合法 YAML，会被**完整收集**不截断（杜绝旧 bug：截断丢掉后续 `- shell` 而误晋升） | 1 |
 | **ERROR**（无法判，转人工） | 缺文件夹 / 缺 `SKILL.md` / 缺 frontmatter / 缺 `name` | 2 |
 
 > **fail-closed**：未知 capability、以及「capabilities 未声明或解析不出」都倒向 audit——拿不准 = 人来看。要自动晋升，skill 必须**显式**写 `capabilities: []`（无危险能力）或只列安全能力。

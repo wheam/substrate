@@ -51,14 +51,15 @@ def split_frontmatter(text):
 
     start_idx/end_idx 是 fm_body（两个 --- 之间内容）在原文中的字符区间。
     """
-    m = re.match(r"(\s*---[ \t]*\n)(.*?)(\n---[ \t]*(?:\n|$))", text, re.S)
+    m = re.match(r"(\s*---[ \t]*\r?\n)(.*?)(\r?\n---[ \t]*(?:\r?\n|$))", text, re.S)
     if not m:
         return None, None, None
     return m.group(2), m.start(2), m.end(2)
 
 
 def has_tags(fm_body):
-    return re.search(r"(?m)^[ \t]*tags[ \t]*:", fm_body) is not None
+    # 顶层 tags 键在第 0 列；缩进的 tags（嵌套键）不算（与 doctor 列 0 解析一致）。
+    return re.search(r"(?m)^tags[ \t]*:", fm_body) is not None
 
 
 def target_pages(root):
@@ -86,17 +87,26 @@ def needs_migration(root, page):
 
 
 def apply_to_page(page):
-    """在 frontmatter 块末尾追加 `tags: []`。返回 True 表示改了。"""
-    text = read_text(page)
-    if text is None:
+    """在 frontmatter 块末尾追加 `tags: []`；逐字保留原 BOM 与换行风格（纯追加，不改正文/其它字段）。"""
+    try:
+        with open(page, "rb") as f:
+            raw = f.read()
+    except Exception:
         return False
+    bom = raw.startswith(b"\xef\xbb\xbf")
+    try:
+        text = raw[3:].decode("utf-8") if bom else raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return False   # 非 UTF-8：本迁移不处理，交 doctor 报告
     fm, start, end = split_frontmatter(text)
     if fm is None or has_tags(fm):
         return False
-    new_fm = fm.rstrip("\n") + "\ntags: []"
+    nl = "\r\n" if "\r\n" in text else "\n"
+    new_fm = fm.rstrip("\r\n") + nl + "tags: []"
     new_text = text[:start] + new_fm + text[end:]
-    with open(page, "w", encoding="utf-8") as f:
-        f.write(new_text)
+    out = (b"\xef\xbb\xbf" if bom else b"") + new_text.encode("utf-8")
+    with open(page, "wb") as f:
+        f.write(out)
     return True
 
 
@@ -133,7 +143,7 @@ def main(argv):
     skip_nofm = [p for p, s in plan if s == "no-frontmatter"]
 
     mode = "APPLY" if apply else "DRY-RUN"
-    print(f"0001-knowledge-tags-field  root={rel(root, root) if False else root}  mode={mode}")
+    print(f"0001-knowledge-tags-field  root={root}  mode={mode}")
     for p, _ in todo:
         print(f"  补 tags:[]   {rel(root, p)}")
     for p in skip_nofm:

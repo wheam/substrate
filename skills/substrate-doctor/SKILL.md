@@ -34,18 +34,20 @@ python3 <本 skill 目录>/doctor.py <实例根目录>
 
 | 检查 | 说明 |
 |---|---|
-| 断链 | `[[wikilink]]` 指向不存在的页（**先剥 inline code/代码块**，举例用的反引号 `[[..]]` 不算） |
-| 孤儿 | 内容页无任何入链（**豁免** governance/、README、`_` 前缀、`by-*` 分片） |
+| 断链 | `[[wikilink]]` 指向不存在的页（**先剥 inline code/代码块**；路径式链接 `[[a/b]]` 必须按路径命中，不退回 basename 兜底；`skills/` 里的 `[[..]]` 视为示例不计入图） |
+| 孤儿 | 内容页无任何入链（**豁免** governance/、`skills/`、README、`_` 前缀、`by-*` 分片） |
 | frontmatter | 内容页缺 `title/created/updated/type`（同上豁免集） |
-| 索引漂移 | 同目录有 README.md 时，内容兄弟页须登记在该 README |
-| 计数漂移 | `collections/*/data.csv` 行数 ≠ 页面声称的「N 条/rows」 |
-| registry | `skills/_registry.md` 条目缺 `pin` |
+| 索引漂移 | 同目录有 README.md 时，内容兄弟页须登记在该 README（整词匹配 `.md`） |
+| 计数漂移 | **与 `data.csv` 同目录的索引页**声称的「N 条/rows」≠ 主表行数（分类分片 `by-*/` 天然是子集，不参与此校验） |
+| registry | `skills/_registry.md` 条目缺 `pin`（ERROR）；pin 是 main/master/HEAD 却未声明 `trusted_floating: true`（WARN） |
+| skill 清单（warn） | `skills/<name>/SKILL.md` 应是合规 manifest（缺 `name/target_runtimes/risk_level` → WARN，见 skill-manifest.schema） |
 | 毕业（advice） | 收藏行数 > `zones.md` `graduation: rows>N` 阈值 |
 
 ## 实现约束（改 doctor.py 时必守）
 
 - **不假设 PyYAML**：frontmatter/zones/registry 用受限子集正则解析（python3 标准库）。
 - 抽 `[[wikilink]]` 前**先剥离 inline code 与 fenced code block**。
-- 孤儿/frontmatter 检查**豁免** governance/* 与 README/索引/分片结构页。
+- 孤儿/frontmatter 检查**豁免** governance/*、`skills/*`（其顶部是 skill-manifest，不是内容页）与 README/索引/分片结构页。
+- 计数漂移只校验与 `data.csv` 同目录的索引页；分类分片是子集，不与主表总数比（否则多类别分片必误报）。
 
 > 当作迁移测试套件：迁移前存一份 `doctor` 计数快照，迁移后再跑，不变量对不上就拒绝（回滚到 `pre-migrate-<from>` tag）。

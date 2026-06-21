@@ -5,8 +5,8 @@ required: [name, upstream_git_url, pin, target_runtimes]
 properties:
   name:             { type: string }
   upstream_git_url: { type: string }
-  pin:              { type: string, description: "tag/commit/branch；裸追 main 需显式标 trusted-floating" }
-  trusted_floating: { type: boolean, default: false }
+  pin:              { type: string, description: "tag/commit/branch，**必填**（substrate-sync 缺 pin 拒绝安装）。要追移动 ref（如 main）就把 pin 设成该 ref 名并同时把 trusted_floating 设 true。" }
+  trusted_floating: { type: boolean, default: false, description: "声明 pin 是会移动的 ref（main/分支）。doctor 对「pin=main/master/HEAD 却未声明 trusted_floating: true」发 WARN（供应链提示）。不会让你省略 pin。" }
   target_runtimes:  { type: array, items: { type: string }, description: "取值由实例的 adapter 定义，引擎不钉死具体产品名" }
   install_paths:    { type: object, description: "各 runtime 的安装路径，可由 adapter 推断" }
   notes:            { type: string }

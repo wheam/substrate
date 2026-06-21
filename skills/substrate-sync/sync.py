@@ -8,14 +8,23 @@
 默认 **dry-run**（只打计划，不动文件）；加 --apply 才真正拷贝/clone。
 --target 省略时：从 adapters/<runtime>/adapter.yaml 推断安装目录（view-layer 的 adapter 会被拒绝）。
 本地清单（installed-skills.json）写到 --target，**不入库**。
+
+选择性安装（fail-closed）：
+  - 只装 `target_runtimes` 含本 runtime 或 `all` 的 skill；**未声明 target_runtimes 的一律跳过**
+    （不再 fail-open 装到所有 runtime）。要全 runtime 请显式写 `target_runtimes: [all]`。
+  - registry（第三方）：缺 pin 拒绝 clone；pin 检出失败即视为安装失败，**绝不静默停在默认分支**；
+    安装成功后删除 .git，冻结为该 commit 的快照（杜绝 stray `git pull` 漂移），并把 commit 记入清单。
+
+退出码: 0 = 全部成功; 1 = 有 registry 安装失败/跳过; 2 = 调用错误。
 """
 import sys, os, re, json, shutil, argparse, subprocess
 
 def field(text, key):
-    m = re.search(rf"(?m)^{key}:\s*\[(.*?)\]", text)
-    if m: return [x.strip() for x in m.group(1).split(",") if x.strip()]
-    m = re.search(rf"(?m)^{key}:\s*\n((?:[ \t]*-[ \t]*.+\n?)+)", text)
-    if m: return [re.sub(r"^[ \t]*-[ \t]*", "", l).strip() for l in m.group(1).splitlines() if l.strip()]
+    """读列表字段。容忍 key 行前导缩进（registry 条目里 key 是缩进在 `- name:` 下的）。"""
+    m = re.search(rf"(?m)^[ \t]*{key}:[ \t]*\[(.*?)\]", text)
+    if m: return [x.strip().strip("'\"") for x in m.group(1).split(",") if x.strip()]
+    m = re.search(rf"(?m)^[ \t]*{key}:[ \t]*\n((?:[ \t]*-[ \t]*.+\n?)+)", text)
+    if m: return [re.sub(r"^[ \t]*-[ \t]*", "", l).strip().strip("'\"") for l in m.group(1).splitlines() if l.strip()]
     return []
 
 def manifest_of(skill_dir):
@@ -25,22 +34,28 @@ def manifest_of(skill_dir):
     return {"target_runtimes": field(t, "target_runtimes") if t.lstrip().startswith("---") else []}
 
 def selected(runtimes, runtime):
-    return (not runtimes) or ("all" in runtimes) or (runtime in runtimes)
+    """fail-closed：未声明 target_runtimes（[]）不算选中。要全 runtime 显式写 [all]。"""
+    return ("all" in runtimes) or (runtime in runtimes)
 
 def parse_registry(path, runtime):
-    if not path or not os.path.isfile(path): return []
+    """返回 (entries, undeclared)。entries 是选中本 runtime 的；undeclared 是未声明 target_runtimes 被跳过的。"""
+    if not path or not os.path.isfile(path): return [], []
     t = open(path, encoding="utf-8-sig", errors="replace").read()
     m = re.search(r"```yaml\n(.*?)```", t, re.S)
     block = "\n".join(l for l in (m.group(1) if m else "").splitlines() if not l.lstrip().startswith("#"))
-    out = []
+    out, undeclared = [], []
     for chunk in re.split(r"(?m)^\s*-\s+name:", block)[1:]:
         name = chunk.splitlines()[0].strip()
         url = (re.search(r"(?m)^\s*upstream_git_url:\s*(\S+)", chunk) or [None, None])[1]
         pinm = re.search(r"(?m)^\s*pin:\s*(\S+)", chunk)
-        rts = field(chunk, "target_runtimes")   # 整块解析，含多行列表形式（避免 fail-open）
-        if url and selected(rts, runtime):
+        rts = field(chunk, "target_runtimes")   # 整块解析，含缩进/多行列表形式
+        if not url:
+            continue
+        if not rts:
+            undeclared.append(name); continue    # fail-closed：未声明 target_runtimes 不装
+        if selected(rts, runtime):
             out.append({"name": name, "url": url, "pin": pinm.group(1) if pinm else None})
-    return out
+    return out, undeclared
 
 def adapter_target(adapters_dir, runtime):
     """从 adapters/<runtime>/adapter.yaml 推断 skill 安装目录。返回 (target|None, err|None)。"""
@@ -92,32 +107,36 @@ def main():
             print(f"substrate-sync: {err}"); return 2
         print(f"  (--target 未给：从 adapter 推断为 {a.target})")
     dry = not a.apply
-    plan_own, plan_reg, skipped = [], [], []
+    plan_own, plan_reg, skipped, undeclared = [], [], [], []
 
     for entry in sorted(os.listdir(a.src)):
         d = os.path.join(a.src, entry)
         man = manifest_of(d)
         if man is None: continue
         rts = man["target_runtimes"]
-        if selected(rts, a.runtime):
+        if not rts:
+            undeclared.append(entry)             # fail-closed：未声明 target_runtimes，不装
+        elif selected(rts, a.runtime):
             variant = f"SKILL.{a.runtime}.md"
             plan_own.append({"name": entry, "variant": variant if os.path.isfile(os.path.join(d, variant)) else "SKILL.md", "src": d})
         else:
             skipped.append(entry)
 
-    plan_reg = parse_registry(a.registry, a.runtime)
+    plan_reg, reg_undeclared = parse_registry(a.registry, a.runtime)
+    undeclared += [f"registry:{n}" for n in reg_undeclared]
 
     print(f"substrate-sync  runtime={a.runtime}  target={a.target}  mode={'DRY-RUN' if dry else 'APPLY'}")
     for p in plan_own: print(f"  own      install {p['name']}  ({p['variant']})")
-    for p in plan_reg: print(f"  registry {'clone' if p['pin'] else 'CLONE(no-pin!)'} {p['name']}  {p['url']}@{p['pin']}")
+    for p in plan_reg: print(f"  registry {'clone' if p['pin'] else 'SKIP(no-pin!)'} {p['name']}  {p['url']}@{p['pin']}")
     for s in skipped:  print(f"  skip     {s}  (runtime 不匹配)")
+    for u in undeclared: print(f"  skip     {u}  (未声明 target_runtimes；要装请写 [all] 或含本 runtime)")
 
     if dry:
         print(f"  → 计划 {len(plan_own)} own + {len(plan_reg)} registry（dry-run，未执行）")
         return 0
 
     os.makedirs(a.target, exist_ok=True)
-    installed = []
+    installed, failed = [], []
     for p in plan_own:
         dest = os.path.join(a.target, p["name"])
         if os.path.isdir(dest): shutil.rmtree(dest)
@@ -127,22 +146,36 @@ def main():
         installed.append({"name": p["name"], "source": "own", "variant": p["variant"]})
     for p in plan_reg:
         if not p["pin"]:
-            print(f"  [SKIP] {p['name']} 无 pin，拒绝 clone（裸追上游有风险；请加 pin）")
-            continue
+            print(f"  [SKIP] {p['name']} 无 pin，拒绝 clone（裸追上游有风险；请加 pin，如 pin: v1.2.0，或 pin: main + trusted_floating: true）")
+            failed.append(p["name"]); continue
         dest = os.path.join(a.target, p["name"])
         try:
             if os.path.isdir(dest): shutil.rmtree(dest)
-            subprocess.run(["git", "clone", "--depth", "1", p["url"], dest], check=True)
-            if p["pin"]:
-                subprocess.run(["git", "-C", dest, "fetch", "--depth", "1", "origin", p["pin"]], check=False)
-                subprocess.run(["git", "-C", dest, "checkout", p["pin"]], check=False)
-            installed.append({"name": p["name"], "source": "registry", "pin": p["pin"]})
-        except Exception as e:
-            print(f"  [WARN] clone 失败 {p['name']}: {e}")
+            subprocess.run(["git", "clone", "--depth", "1", p["url"], dest],
+                           check=True, capture_output=True, text=True)
+            # 钉到 pin：fetch + 检出 FETCH_HEAD；任一失败即安装失败（绝不静默停在默认分支）。
+            subprocess.run(["git", "-C", dest, "fetch", "--depth", "1", "origin", p["pin"]],
+                           check=True, capture_output=True, text=True)
+            subprocess.run(["git", "-C", dest, "checkout", "--detach", "FETCH_HEAD"],
+                           check=True, capture_output=True, text=True)
+            commit = subprocess.run(["git", "-C", dest, "rev-parse", "HEAD"],
+                                    check=True, capture_output=True, text=True).stdout.strip()
+            shutil.rmtree(os.path.join(dest, ".git"), ignore_errors=True)  # 冻结为快照，杜绝 stray git pull 漂移
+            installed.append({"name": p["name"], "source": "registry", "pin": p["pin"], "commit": commit})
+            print(f"  [OK] registry {p['name']} @ {p['pin']} ({commit[:10]})")
+        except subprocess.CalledProcessError as e:
+            shutil.rmtree(dest, ignore_errors=True)   # 不留半截/错版本，也不记录到清单
+            msg = (e.stderr or "").strip()
+            last = msg.splitlines()[-1] if msg else str(e)
+            print(f"  [FAIL] {p['name']} 安装失败（pin={p['pin']} 不可达或检出失败）：{last}")
+            failed.append(p["name"])
 
     mpath = a.manifest or os.path.join(a.target, "installed-skills.json")
     json.dump({"runtime": a.runtime, "installed": installed}, open(mpath, "w"), ensure_ascii=False, indent=2)
     print(f"  → 装了 {len(installed)} 个；清单写入 {mpath}")
+    if failed:
+        print(f"  [WARN] {len(failed)} 个 registry 条目未安装: {failed}")
+        return 1
     return 0
 
 if __name__ == "__main__":
