@@ -1,0 +1,30 @@
+# 契约见 engine schemas/migration.schema.yaml
+id: 0002-todo-zone
+from_version: "0.2.0"
+to_version: "0.3.0"
+title: 把根 TODO.md 升级成 todo/ zone（owner + per-agent + 索引）
+description: >-
+  v0.3.0 起待办从「实例根单文件 TODO.md」升级为 todo/ zone：支持给主人一个 owner.md +
+  每个 agent 一个 <agent>.md（per-agent 由 fleet/ 派生，由 substrate-todo 维护），统一放
+  todo/ 文件夹并带文件级索引。本迁移把现有 root TODO.md 内容无损搬进 todo/owner.md（补
+  frontmatter），建 todo/README 索引，在 governance/zones.md 注册 todo zone，删除 root TODO.md。
+risk_level: medium
+idempotent: true
+steps:
+  - action: >-
+      建 todo/owner.md：把 root TODO.md 的正文（去掉顶部 H1）逐字搬入，前置最小 frontmatter
+      （title/created/updated/type: todo）。已存在则跳过。
+    verify: todo/owner.md 存在且含 frontmatter。
+  - action: 建 todo/README.md（Agent Packet + 文件级索引块，登记 owner.md）。已存在则跳过。
+    verify: todo/README.md 存在。
+  - action: 在 governance/zones.md 的 YAML 块注册 id=todo 的 zone（path/schema/maintainer_skill/readers/writers 齐全）。已注册则跳过。
+    verify: zones.md 的 YAML 块含 `- id: todo`。
+  - action: 删除 root TODO.md（内容已无损搬入 todo/owner.md）。
+    verify: 根目录不再有 TODO.md（apply.py --check 综合校验 owner+zone 在场）。
+preserves:
+  - root TODO.md 的全部待办正文（逐字搬入 todo/owner.md，不丢条目）
+  - md 文件总数不减少（TODO.md→owner.md 平移 + 新增 README，净增）
+  - 其它 zone 注册、wikilink 图不变
+rollback: >-
+  git reset --hard pre-migrate-0.2.0（substrate-migrate 在应用前已打此 tag）。
+  本迁移以平移+追加为主，回滚即恢复 root TODO.md、移除 todo/ 与 zone 注册，无数据损失。

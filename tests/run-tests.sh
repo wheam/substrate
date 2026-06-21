@@ -256,6 +256,26 @@ grep -L "^target_runtimes: \[all\]" "$ENGINE"/skills/substrate-*/SKILL.md | grep
 OUT24="$(CLAUDE_SKILL_DIR=x HERMES_SKILL_DIR="$(mktemp -d)" python3 "$SYNC" --src "$ENGINE/skills" --runtime hermes 2>&1)"
 printf '%s' "$OUT24" | grep -q "install substrate-doctor" && ok "substrate-doctor 计划装进 hermes runtime" || bad "substrate-* 未装进 hermes"
 
+echo "== 25) migration 0002-todo-zone: root TODO.md → todo/ zone（内容无损 + 幂等 + 迁后 doctor 0 error）=="
+APP2="$ENGINE/migrations/0002-todo-zone/apply.py"
+T11="$(mktemp -d)/inst"; mkdir -p "$T11"; cp -R "$ENGINE/template/." "$T11/"
+rm -rf "$T11/todo"   # 退化成 v0.2.0 形态：无 todo zone、有 root TODO.md
+python3 - "$T11/governance/zones.md" <<'PY'
+import sys,re; p=sys.argv[1]; t=open(p,encoding="utf-8").read()
+open(p,"w",encoding="utf-8").write(re.sub(r"  - id: todo\n(?:    .*\n)*\n?","",t))
+PY
+printf '# TODO\n\n## 进行中\n- [ ] 锚点待办XYZ\n## 待办\n- _（空）_\n## 已完成\n- _（空）_\n' > "$T11/TODO.md"
+expect_rc 0 "0002 dry-run rc=0" python3 "$APP2" "$T11"
+[ -d "$T11/todo" ] && bad "dry-run 不该建 todo/" || ok "0002 dry-run 不写盘"
+python3 "$APP2" "$T11" --apply >/dev/null 2>&1
+{ [ -f "$T11/todo/owner.md" ] && [ -f "$T11/todo/README.md" ]; } && ok "建了 todo/owner.md + README" || bad "todo/ 未建全"
+grep -q "锚点待办XYZ" "$T11/todo/owner.md" && ok "root TODO 内容无损搬入 owner.md" || bad "待办内容丢失"
+[ -f "$T11/TODO.md" ] && bad "root TODO.md 未删" || ok "root TODO.md 已删"
+grep -qE "^\s*- id:\s*todo\b" "$T11/governance/zones.md" && ok "todo zone 已注册进 zones.md" || bad "todo zone 未注册"
+expect_rc 0 "0002 --check 达标" python3 "$APP2" "$T11" --check
+python3 "$APP2" "$T11" --apply 2>&1 | grep -q "幂等\|无需改动" && ok "0002 幂等（再跑无改动）" || bad "0002 非幂等"
+expect_rc 0 "迁移后 doctor 0 error" python3 "$DOC" "$T11"
+
 echo
 echo "==== 结果: $PASS passed, $FAIL failed ===="
 [ "$FAIL" = 0 ]

@@ -3,80 +3,73 @@ name: substrate-todo
 target_runtimes: [all]
 risk_level: medium
 capabilities: [shell]
-reason: 维护实例根的 TODO.md 待办清单（改文件、跑 git）
+reason: 维护 todo/ zone 的待办清单（主人 + 每个 agent 一份；改文件、跑 git）
 ---
 
-# substrate-todo — 待办维护
+# substrate-todo — 待办维护（todo/ zone）
 
-维护一个 **Substrate 实例**的待办清单。设计上**不新开 zone**——待办就是实例根的一个朴素
-checklist 文件 **`TODO.md`**（进行中 / 待办 / 已完成 小节）。这是最小、贴合真实实例的做法：
-待办是高频、低结构、易过期的东西，给它整套 zone（frontmatter + 互链 + 两级索引 + doctor 入链）
-反而是过度设计（YAGNI）。
+维护一个 **Substrate 实例**的待办。**v0.3.0 起待办是一个 zone：`todo/`**——主人一份 `owner.md`，
+每个 agent 各一份 `<agent>.md`（按 `fleet/` 派生），统一放 `todo/` 文件夹并带文件级索引。
+（v0.2.0 的「实例根单文件 `TODO.md`」已由 migration `0002-todo-zone` 升级到本形态。）
 
-> 「调用某 skill」= 读它的 `SKILL.md` 并执行；带脚本的 skill 形如 `python3 <该 skill 目录>/xxx.py …`（无独立 CLI 二进制）。本 skill 无脚本——纯文件编辑，按下面流程做即可。
+> 「调用某 skill」= 读它的 `SKILL.md` 并执行；带脚本的 skill 形如 `python3 <该 skill 目录>/xxx.py …`。本 skill 无自带脚本——文件编辑 + 复用 `substrate-curator` 的 `curate.py reindex` 刷索引。
 
 ## 何时用
 
-用户说「加个待办 / 记一下要做 X / 标记完成 / 这条做完了 / 看下我的 todo / 清一下 todo / 还有啥没做」。
+「加个待办 / 记一下要做 X / 标记完成 / 这条做完了 / 看下我的（或某 agent 的）todo / 清一下 todo / 还有啥没做」。
 
-## TODO.md 的形状（约定，刻意极简）
+## todo/ zone 的形状
 
-实例根的 `TODO.md`，**没有 frontmatter、不靠 wikilink 入链**——它是结构页，doctor 对它豁免（见下「与 doctor 的契约」）。固定三小节，GitHub 风格 checklist：
-
-```markdown
-# TODO
-
-> 实例根的待办清单，由 `substrate-todo` 维护。完成的条目定期归档/清理，别让本文件无限膨胀。
-
-## 进行中
-
-- [ ] 正在做的事（一行说清）
-
-## 待办
-
-- [ ] 还没开始的事
-- [ ] 与知识页相关的，可 [[互链]]（如 跟进 [[some-topic]]）
-
-## 已完成
-
-- [x] 做完的事（YYYY-MM-DD）
+```
+todo/
+├── README.md        # zone 索引（Agent Packet + 文件级索引块，自动维护）
+├── owner.md         # 主人的待办
+└── <agent>.md       # 每个 agent 一份（如 main-dev.md / railway-fast-assistant.md），按 fleet 角色命名
 ```
 
-约定（最小集，需要再长）：
-- 每条一行，动词开头，**一行说清**；展不开的细节放对应知识页/项目页，这里只留链接。
-- 三小节固定：**进行中 / 待办 / 已完成**。空小节保留标题，写 `- _（空）_` 占位即可。
-- 完成时给 `[x]` + 完成日期 `（YYYY-MM-DD）`，便于后续归档。
-- 可与 knowledge / projects 页 `[[互链]]`，但**这是单向出链**：被链页不必为 TODO 条目补反向链接（TODO 条目是临时的）。
+- **每份清单**：带最小 frontmatter（`title / created / updated / type: todo`），正文固定三小节
+  **进行中 / 待办 / 已完成**（GitHub 风格 `- [ ]` / `- [x]`）。空小节写 `- _（空）_`。
+- **owner.md** = 给主人的；**`<agent>.md`** = 给某个 agent 的活儿。
+- 一条一行、动词开头；展不开的细节放对应知识/项目页，这里只留 `[[链接]]`。
 
-## 维护流程（每次必守，与其它维护 skill 的 git 流程一致）
+## per-agent todo 怎么来（按 fleet 派生）
 
-1. **同步**：`git pull`（CONSTITUTION 不变量 1）。
-2. **读现状**：读实例根 `TODO.md`；不存在则用上面模板新建（模板见 `template/TODO.md`，由 bootstrap 脚手架）。
+「有多少个 agent → 有多少份 todo」：清单**对齐 `fleet/`**。
+
+1. 读 `fleet/` 里登记的设备/agent（及其角色）。
+2. 对每个该有独立待办的 agent，确保 `todo/<agent>.md` 存在（缺则按模板建，frontmatter `title: 待办 — <agent>`）。
+3. fleet 新增 agent → 新建对应 todo 文件；移除 agent → 该 todo 文件归档/删除。
+4. **fleet 为空时**：只维护 `owner.md`；不要凭空造 agent 待办（per-agent 由 fleet 驱动，不臆测）。
+
+## 维护流程（每次必守）
+
+1. **同步**：`git pull`。
+2. **定位**：主人的事 → `todo/owner.md`；某 agent 的事 → `todo/<agent>.md`（不存在且 fleet 有该 agent 则先建）。
 3. **改**：
-   - **加待办** → 追加一条到「待办」（或开工时直接进「进行中」）。先扫一眼三小节**去重**，别重复加同一件事。
-   - **开工** → 把条目从「待办」移到「进行中」。
-   - **完成** → 把条目改 `[x]` + 完成日期，从「进行中」移到「已完成」。
-   - **删除/作废** → 直接删该行（待办本就易过期；要留痕的事项不属于待办，记进知识页）。
-4. **保持整洁**（防退化）：
-   - 「进行中」别堆太多——同时进行的事项保持少量。
-   - 「已完成」定期清理：很旧的完成项删掉或归档（待办不是历史档案；要长期留痕请写进对应知识页/项目页）。
-   - 不留空行噪声、不留半句话条目。
-5. **自检**：跑 `python3 <substrate-doctor skill 目录>/doctor.py <实例根>`，确认 0 error。TODO.md 被 doctor 豁免（不查孤儿/frontmatter），但别因编辑顺手碰坏别处。
-6. **提交**：`git add -A && git commit -m "<说明，如 'todo: 完成 X / 新增 Y'>" && git push`。
-7. **汇报**：向用户列出本次对 `TODO.md` 做的增删改（哪几条）。
+   - 加待办 → 追加到该清单「待办」（开工就放「进行中」）。先扫一眼**去重**。
+   - 开工 → 从「待办」移到「进行中」。
+   - 完成 → 改 `[x]` + 完成日期，移到「已完成」。
+   - 删除/作废 → 删该行（要留痕的事项不属于待办，记进知识页）。
+   - 改页 bump frontmatter 的 `updated`。
+4. **刷索引**：新增/删 `todo/*.md` 文件后，跑
+   `python3 <substrate-curator 目录>/curate.py reindex --instance <实例根> --dir todo --apply`
+   （只改清单内容、没增删文件时不必刷）。
+5. **保持整洁**：「进行中」别堆太多；「已完成」定期清理（待办不是历史档案）。
+6. **自检**：跑 `python3 <substrate-doctor 目录>/doctor.py <实例根>`，0 error。
+7. **提交**：`git add -A && git commit -m "todo: …" && git push`。
+8. **汇报**：列出本次对哪份清单的增删改。
 
 ## 查询流程
 
-1. `git pull`。
-2. 读实例根 `TODO.md`，按小节回答（进行中有啥 / 待办还剩啥 / 最近完成了啥）。
-3. 条目带 `[[链接]]` 时，可顺着读对应知识/项目页补充上下文。
+1. `git pull`。2. 读 `todo/README` 看有哪几份清单；读 `owner.md` / 指定 `<agent>.md` 按小节回答。
 
 ## 边界
 
-- 本 skill 只管实例根的 `TODO.md`。**它不是知识库**：值得长期留存、跨 agent 有共享价值的东西走 `substrate-curator` 进 `knowledge/`；项目级任务清单可放对应 `projects/<x>/` 页，由 curator 维护。
-- 判尺：**临时、会做完、做完就该清** → TODO.md；**持久、要反复查、有共享价值** → 知识页（curator）。
-- 不开 zone、不进 `zones.md`、不入两级索引——这是有意为之（见上「设计上不新开 zone」）。
+- 本 skill 只管 `todo/` zone。**不是知识库**：值得长期留存、跨 agent 共享价值的东西走 `substrate-curator` 进 `knowledge/`；项目级任务清单放 `projects/<x>/`。
+- 判尺：**临时、会做完、做完就清** → todo/；**持久、要反复查** → 知识页（curator）。
 
-## 与 doctor 的契约（重要）
+## 与 doctor 的契约
 
-`TODO.md` 没有 frontmatter、也不靠 wikilink 入链，所以 `substrate-doctor` 必须把**实例根的 `TODO.md` 当结构页豁免**（孤儿 / frontmatter 检查跳过），否则它会被误报成孤儿 + 缺 frontmatter。该豁免在 `doctor.py` 的 `is_structural()` 里实现（本 skill 不改 doctor，见引擎集成项）。
+`todo/` 是普通内容 zone：每份清单是**带 frontmatter 的内容页**（不再像旧 `TODO.md` 那样靠豁免）。
+入链来自 `todo/README` 的索引（reindex 自动登记 → 不报孤儿）；互链 <2 仅 WARN（待办本就少链接，不报错）。
+（旧 root `TODO.md` 的结构页豁免仍保留在 doctor 里，用于尚未迁移的实例向后兼容。）
