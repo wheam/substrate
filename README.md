@@ -1,7 +1,7 @@
 # Substrate
 
 > **个人 AI agent 舰队的「共享状态层」引擎**——一个 git 原生、可被 agent 操作、可审计、可自描述、可安全升级的模板与机制。
-> 状态：**积极开发中**（P0 契约与模板已落地，见底部）。这是从设计（`docs/BUILD-PLAN.md`）抽象出的**开源引擎**，本身**不含任何个人内容**——引擎对所有用户中立。
+> 状态：**P0–P5 全部落地**，`sh tests/run-tests.sh` 70 个零依赖回归测试全绿；积极维护中。这是从设计（`docs/BUILD-PLAN.md`）抽象出的**开源引擎**，本身**不含任何个人内容**——引擎对所有用户中立。
 
 ---
 
@@ -13,6 +13,64 @@
 **不是**：又一个 Obsidian、又一个 RAG。它卖的是 **shared state layer**——知识、记忆、技能、清单、规则、审计，都在一个**可版本化、可迁移、可被 agent 操作**的系统里，不被锁进任何平台。
 
 > 目标用户：有多个 agent/runtime、频繁让 agent 代办、要跨设备一致状态、关心数据可迁移的人。
+
+---
+
+## 快速上手（起手 4 步）
+
+你需要两个 git 仓库：**引擎**（这个仓库，公开，只含机制）+ **你的实例**（私有，放你的知识/记忆/技能/清单）。下面 4 步从零搭起你自己的个人知识库。
+
+**前置**：`git`、`python3`（**标准库即可，无需 pip 装任何包**）、一个能读 skill 的 agent runtime（Claude Code、Codex、Hermes…）。
+
+```sh
+# 1) 拿引擎（或在 GitHub 上 Fork 到你账号）
+git clone https://github.com/<you>/substrate.git && cd substrate
+
+# 2) 脚手架你自己的私有实例（自包含：自带 template 骨架 + vendored 维护 skill + adapters）
+./init-instance.sh ~/my-cortex my-instance
+cd ~/my-cortex && git init && git add -A && git commit -m "init my substrate instance"
+#   然后在 GitHub 建一个【私有】仓库，把它 push 上去（你的个人内容不应公开）
+
+# 3) 把维护 skill 装进你的 agent runtime（按 runtime 选择性安装）
+python3 ~/my-cortex/skills/substrate-sync/sync.py \
+        --src ~/my-cortex/skills --runtime claude-code --apply
+#   换 runtime 就改 --runtime codex / hermes …（支持的见 adapters/）
+
+# 4) 让 agent 上手：对它说「帮我接入这个个人仓库 / 这个库是什么」
+#    → 触发 substrate-bootstrap：读宪法+分区、配本地身份、自检对齐，然后就能替你维护了
+```
+
+做完这 4 步，你就有了一个**多 agent 共维、git 原生、可迁移**的个人状态层。换机器/换 agent，只要 `git clone 你的实例` + 重跑第 3 步装 skill，即同一套能力。
+
+## 日常怎么用（和 agent 对话）
+
+装好后用自然语言让 agent 代你维护——它会触发对应 skill：
+
+| 你说 | 触发的 skill |
+|---|---|
+| 「记一下 X / 存进知识库 / 这个值得记录」 | `substrate-curator`（增删改知识页 + 自动互链 + 同步目录索引） |
+| 「收藏这家餐厅 / 加到书单」 | `substrate-collections`（结构化收藏：CSV 为源 + 人读分片） |
+| 「记住我…/ 我的偏好是…」 | `substrate-memory`（跨 agent 共享的「关于主人」记忆） |
+| 「加个待办 / 我的 todo」 | `substrate-todo` |
+| 「这个要不要存 / 存哪 / 算知识还是 skill」 | `substrate-intake`（准入分类） |
+| 「把这些笔记导进库」 | `substrate-import`（批量导入 markdown/vault） |
+| 「体检一下库 / 库有没有问题」 | `substrate-doctor`（断链/孤儿/索引漂移/计数，只读） |
+| 「装/更新 skill / pull 后对齐」 | `substrate-sync` |
+
+> **多机/多 agent 保持一致**：每次开工让 agent 跑「自检例程」（`git pull` → `sync --check` → 落后则 `--apply` → `doctor`）。`sync --check` 会顺带 `git fetch` 比对远程，**本地落后也能发现**，不会误判已最新。想全自动，就给你的 runtime 接一个**会话启动钩子**跑这套（见 `template/governance/bootstrap.md`）。
+
+## 怎么升级（引擎出新版，不丢数据）
+
+引擎发新版后，在**你的实例**里：
+
+```sh
+# 1) 刷新实例里 vendored 的维护 skill 到新引擎
+/path/to/substrate/init-instance.sh --refresh ~/my-cortex
+# 2) 让 agent 跑迁移：对它说「升级库 / 迁移到新版本」→ 触发 substrate-migrate
+#    （有序/幂等/可验证/可回滚；先打 git tag 快照、doctor 前后校验；多机只在 migration_leader 上跑）
+```
+
+迁移当**数据库迁移**做，任何一步都不丢数据（详见 `docs/BUILD-PLAN.md` §9）。
 
 ---
 
@@ -122,6 +180,6 @@ substrate/
 - [x] **P3**：迁移机制（`migrations/` + `substrate-migrate`，含回滚 + 多机幂等 + 引擎自我保护）
 - [x] **P4**：适配器（generic-filesystem + claude-code 做实，codex/hermes/obsidian 声明）
 - [x] **P5**：收尾 skill（collections / memory / todo）
-- [ ] 公开前 gate：LICENSE 定稿
+- [x] LICENSE（MIT）+ 公开 README（快速上手 / 日常用 / 升级）
 
 > 开发依据见 `docs/BUILD-PLAN.md`（P0–P5 完整路线）。
