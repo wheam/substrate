@@ -83,9 +83,9 @@ def is_clean(instance):
     return r.returncode == 0 and r.stdout.strip() == ""
 
 
-def tag_exists(instance, tag):
-    r = git(instance, "rev-parse", "--verify", "--quiet", f"refs/tags/{tag}", check=False)
-    return r.returncode == 0
+def md_count(instance):
+    """实例内 .md 文件数（直接数，不去刮 doctor 的自由文本输出）。迁移不变量：不减少。"""
+    return len(glob.glob(os.path.join(instance, "**", "*.md"), recursive=True))
 
 
 # ── 发现迁移 ─────────────────────────────────────────────────────────────────
@@ -101,6 +101,12 @@ def load_migration(mdir):
     tv = yaml_scalar(text, "to_version")
     title = yaml_scalar(text, "title")
     if not (mid and fv and tv):
+        return None
+    # 契约校验（schemas/migration.schema.yaml 必填）：steps 与 idempotent:true 必须在场，
+    # 否则视为损坏迁移（discover 会据此拒绝继续，不静默跳过）。
+    if not re.search(r"(?m)^[ \t]*idempotent[ \t]*:[ \t]*true\b", text):
+        return None
+    if not re.search(r"(?m)^[ \t]*steps[ \t]*:", text):
         return None
     return {
         "id": mid,
@@ -198,8 +204,9 @@ def run_one(meta, instance, doctor_py, log):
         else:
             log(f"  已回滚到 {tag}（含清理未跟踪残留），可安全重试。转人工审查。")
 
-    # 迁移前 doctor 快照
-    pre_code, pre_md, pre_zones, _ = doctor_snapshot(doctor_py, instance)
+    # 迁移前 doctor 快照（md 计数直接数文件，不依赖 doctor stdout 文案）
+    pre_code, _, pre_zones, _ = doctor_snapshot(doctor_py, instance)
+    pre_md = md_count(instance)
     log(f"  迁移前 doctor: exit={pre_code} md={pre_md} zones={sorted(pre_zones)}")
 
     # 应用变换（幂等）
@@ -228,15 +235,14 @@ def run_one(meta, instance, doctor_py, log):
         return False
 
     # 迁移后 doctor + 不变量对比
-    post_code, post_md, post_zones, post_out = doctor_snapshot(doctor_py, instance)
+    post_code, _, post_zones, post_out = doctor_snapshot(doctor_py, instance)
+    post_md = md_count(instance)
     log(f"  迁移后 doctor: exit={post_code} md={post_md} zones={sorted(post_zones)}")
     if post_code not in (0,):
         # 迁移后必须 0 error（doctor 退出 2 = 调用错误也算失败）
         rollback(f"迁移后 doctor 非 0（exit={post_code}），有 error 或调用错误:\n{post_out}")
         return False
-    if pre_md is None or post_md is None:
-        log("  [WARN] 无法从 doctor 输出解析 md 计数——跳过『文件数不减少』不变量校验（请人工留意）。")
-    elif post_md < pre_md:
+    if post_md < pre_md:
         rollback(f"md 文件数减少 {pre_md} → {post_md}（疑似丢失内容页）。增/拆文件允许，删减不允许。")
         return False
     lost = pre_zones - post_zones
@@ -360,7 +366,18 @@ def main(argv):
         return 2
 
     if not a.yes:
-        log(f"  （非交互模式请加 --yes；交互场景应由 agent/人在此确认后继续。）")
+        # 真正的确认闸门：交互场景提示输入 yes；非交互（CI/agent）必须显式 --yes，否则中止不执行。
+        if sys.stdin.isatty():
+            try:
+                ans = input("  确认执行以上迁移计划？输入 yes 继续: ").strip().lower()
+            except EOFError:
+                ans = ""
+            if ans not in ("yes", "y"):
+                log("  已取消：未确认（未做任何改动）。")
+                return 0
+        else:
+            log("  [中止] 非交互环境需显式 --yes 确认。已展示迁移计划，复核后加 --yes 重跑。")
+            return 2
 
     # ── 按序应用，每个 = tag → apply → verify → doctor 前后对比 ──
     for m in pending:
@@ -368,15 +385,15 @@ def main(argv):
         tag = f"pre-migrate-{m['from']}"
         log(f"  ── 应用 {mid} ({m['from']} → {m['to']}) ──")
 
-        # 备份 tag（幂等：已存在就复用，不重复打）
-        if tag_exists(instance, tag):
-            log(f"  备份 tag 已存在: {tag}（复用）")
-        else:
-            r = git(instance, "tag", tag, check=False)
-            if r.returncode != 0:
-                log(f"  [ERROR] 打 tag 失败: {r.stderr.strip()}；中止。")
-                return 2
-            log(f"  备份: git tag {tag}")
+        # 备份 tag：总是用 -f 把 tag（重）指向**当前 HEAD = 本次迁移前的真实状态**。
+        # 关键修复（防数据丢失）：tag 以版本号命名，跨多次运行会变陈旧；旧实现「已存在就复用」
+        # 会让失败回滚 `git reset --hard <陈旧tag>` 吞掉两次运行之间操作者新提交的内容。
+        # 每次都重指到 HEAD，保证回滚点永远是「本次迁移前」而非某次历史快照。
+        r = git(instance, "tag", "-f", tag, check=False)
+        if r.returncode != 0:
+            log(f"  [ERROR] 打 tag 失败: {r.stderr.strip()}；中止。")
+            return 2
+        log(f"  备份: git tag -f {tag}（指向当前 HEAD）")
 
         ok = run_one(m, instance, doctor_py, log)
         if not ok:
