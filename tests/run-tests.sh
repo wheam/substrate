@@ -291,6 +291,20 @@ expect_rc 0 "非 skill 提交后 --check 仍对齐(不误报)" env CLAUDE_SKILL_
 ( cd "$T12" && printf '\n# tweak\n' >> skills/substrate-todo/SKILL.md && git -c user.name=t -c user.email=t@t add -A && git -c user.name=t -c user.email=t@t commit -q -m skillchange )
 expect_rc 1 "skill 变更后 --check 报漂移(rc=1)" env CLAUDE_SKILL_DIR="$SKD" python3 "$T12/skills/substrate-sync/sync.py" --src "$T12/skills" --runtime claude-code --check
 
+echo "== 27) sync --check: 本地落后远程 → 不误报对齐（堵假对齐：pull 静默失败也能发现自己落后）=="
+ORIGIN3="$(mktemp -d)/origin.git"; git init -q --bare "$ORIGIN3"
+T13="$(mktemp -d)/inst"
+sh "$ENGINE/init-instance.sh" "$T13" t13 >/dev/null 2>&1
+( cd "$T13" && git init -q && git -c user.name=t -c user.email=t@t add -A && git -c user.name=t -c user.email=t@t commit -q -m init \
+  && git branch -M main && git remote add origin "$ORIGIN3" && git push -q -u origin main )
+SKD3="$(mktemp -d)"
+CLAUDE_SKILL_DIR="$SKD3" python3 "$T13/skills/substrate-sync/sync.py" --src "$T13/skills" --runtime claude-code --apply >/dev/null 2>&1
+expect_rc 0 "落后前 --check 报对齐(rc=0)" env CLAUDE_SKILL_DIR="$SKD3" python3 "$T13/skills/substrate-sync/sync.py" --src "$T13/skills" --runtime claude-code --check
+# 另一个 clone 改 skill 推到 origin → T13 落后远程，但自己没 pull（工作树/HEAD 没变）
+CL2="$(mktemp -d)/c2"; git clone -q "$ORIGIN3" "$CL2"
+( cd "$CL2" && printf '\n# remote tweak\n' >> skills/substrate-todo/SKILL.md && git -c user.name=t -c user.email=t@t add -A && git -c user.name=t -c user.email=t@t commit -q -m remotechange && git push -q origin main )
+expect_rc 1 "本地落后远程 → --check 报不对齐(rc=1)" env CLAUDE_SKILL_DIR="$SKD3" python3 "$T13/skills/substrate-sync/sync.py" --src "$T13/skills" --runtime claude-code --check
+
 echo
 echo "==== 结果: $PASS passed, $FAIL failed ===="
 [ "$FAIL" = 0 ]

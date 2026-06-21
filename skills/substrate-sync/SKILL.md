@@ -37,6 +37,16 @@ python3 <本 skill 目录>/sync.py --src <实例skills目录或引擎skills> \
 - 退出码：`0` 全部成功；`1` 有 registry 条目未安装（缺 pin/不可达/检出失败）；`2` 调用错误。
 - 写 `installed-skills.json` 到 `--target`（runtime 的 skill 目录，在实例 repo **之外**，天然 local-only、不入库；仅当 `--target` 被指到实例内某路径时才靠 `.gitignore` 兜底）。
 
+## 自检对齐（`--check`）
+
+`--check` 只读，给「每次开工自检」用，报本机已装 skill 是否落后实例。三层比对：
+
+1. 装机时记录的 `skills_tree`（子树哈希）vs 实例**当前**子树——skill 内容变了就报漂移（改知识页等不动 skill 的提交不会误报）。
+2. 实例里选中本 runtime、却没装的 skill。
+3. **远程**：best-effort `git fetch` 后比本地 `HEAD` vs 上游 `@{u}`——**本地落后远程也算不对齐**。这一层堵住「`git pull` 静默失败（权限/网络）→ 工作树没更新 → 误报已对齐」：即便 pull 没成功，`--check` 自己 fetch 后仍会发现「我落后了」。无上游 / 联系不上远程时**非致命**跳过（只提示，不报错）。
+
+退出码：`0` 已对齐；`1` 不对齐（先 `git pull`，再 `--apply`）；`2` 没装过 / 清单损坏。
+
 ## 鸡生蛋（种子）
 
 「要 sync 先得有 sync」：`substrate-bootstrap` 先把 `substrate-bootstrap` + `substrate-sync` 手动放进 skill 目录种子一次，之后 sync 能自我维护。纯单 runtime 的机器可直接用本脚本自助，不依赖管家。

@@ -24,8 +24,9 @@
 仓库是多 agent、多机器共维的——你本地的副本/skill 随时可能落后。**每个 session 开始、或刚 `git pull` 之后**，按序自检（廉价、幂等）：
 
 1. **拉新**：`git pull`（基于最新状态再动手）。
-2. **对齐 skill**：跑 `substrate-sync --check`——它比对「本机装机时记录的实例 commit」vs「实例当前 commit」，并列出实例里有、本机没装的 skill。
-   - 报 ⚠ 不对齐（退出码 1）→ 跑 `substrate-sync --apply` 把 skill 更新/补齐到当前版本。
+2. **对齐 skill**：跑 `substrate-sync --check`——它比对「本机装机时记录的 skills/ 子树」vs「实例当前子树」、列出实例里有本机没装的 skill，并 **best-effort `git fetch` 比对本地 vs 远程上游**。
+   - 报 ⚠ 不对齐（退出码 1）→ 若提示「落后远程」先 `git pull`，再跑 `substrate-sync --apply` 把 skill 更新/补齐到当前版本。
+   - ★ 这一步即便上面的 `git pull` **静默失败了**（权限/网络）也兜得住：`--check` 自己 fetch 后会发现「本地落后远程」，不会拿没更新的工作树误报「已对齐」。联系不上远程时只提示、不报错。
 3. **对齐版本/迁移**：跑 `substrate-migrate`（dry-run，不加 --apply）——若 `instance.version < engine.version` 它会列出 pending 迁移。
    - 有 pending → 交 `substrate-migrate`（多机只在 `migration_leader` 上执行；它备份 tag、出计划、幂等应用、doctor 前后校验）。**别自己乱迁。**
 4. **体检**：跑 `substrate-doctor`——确认库健康（断链/孤儿/索引/计数），有 error 先修再写。
