@@ -179,6 +179,28 @@ T7="$(mktemp -d)/i"; mkdir -p "$T7"; cp -R "$ENGINE/examples/minimal/." "$T7/"
 printf '\n~~~\n[[totally-missing-page]]\n~~~\n' >> "$T7/knowledge/git.md"
 python3 "$DOC" "$T7" 2>&1 | grep -q "totally-missing-page" && bad "~~~ 围栏内 wikilink 被误判断链" || ok "~~~ 围栏内 wikilink 不误报"
 
+echo "== 17) 改进B: registry kind=plugin 不被 sync clone，只列出 =="
+REGP="$(mktemp -d)/_registry.md"
+printf '```yaml\nregistry:\n  - name: superpowers\n    kind: plugin\n    source: m/superpowers\n    target_runtimes: [claude-code]\n```\n' > "$REGP"
+outp="$(CLAUDE_SKILL_DIR=/tmp/none python3 "$SYNC" --src "$ENGINE/skills" --runtime claude-code --registry "$REGP" 2>&1)"
+{ printf '%s' "$outp" | grep -q "plugin   superpowers" && printf '%s' "$outp" | grep -q "0 registry-git"; } && ok "kind=plugin 只列出、不计入待 clone" || bad "kind=plugin 处理不当"
+
+echo "== 18) 改进B: doctor 对 plugin 条目不要求 pin，但要求 source =="
+TP="$(mktemp -d)/i"; mkdir -p "$TP"; cp -R "$ENGINE/examples/minimal/." "$TP/"
+printf '```yaml\nregistry:\n  - name: sp\n    kind: plugin\n    source: m/sp\n    target_runtimes: [claude-code]\n```\n' > "$TP/skills/_registry.md"
+expect_rc 0 "plugin 有 source → doctor 0 error（不报缺 pin）" python3 "$DOC" "$TP"
+printf '```yaml\nregistry:\n  - name: sp\n    kind: plugin\n    target_runtimes: [claude-code]\n```\n' > "$TP/skills/_registry.md"
+python3 "$DOC" "$TP" 2>&1 | grep -q "plugin 缺 source" && ok "plugin 缺 source → 报错" || bad "plugin 缺 source 未被抓"
+
+echo "== 19) 改进A: init-instance.sh 脚手架自包含实例（vendor 维护 skill + doctor 0 error）=="
+INST="$(mktemp -d)/myi"
+sh "$ENGINE/init-instance.sh" "$INST" testname >/dev/null 2>&1
+{ [ -f "$INST/skills/substrate-doctor/doctor.py" ] && [ -f "$INST/skills/substrate-sync/sync.py" ]; } && ok "维护 skill 已 vendor 进实例" || bad "维护 skill 未 vendor"
+grep -q '^# testname' "$INST/README.md" && ok "{{INSTANCE_NAME}} 已替换" || bad "实例名占位未替换"
+find "$INST" -name __pycache__ | grep -q . && bad "vendor 带进了 __pycache__" || ok "未带入 __pycache__"
+expect_rc 0 "自包含实例 doctor 0 error" python3 "$DOC" "$INST"
+sh "$ENGINE/init-instance.sh" --refresh "$INST" >/dev/null 2>&1 && ok "--refresh 刷新 vendored skill 成功" || bad "--refresh 失败"
+
 echo
 echo "==== 结果: $PASS passed, $FAIL failed ===="
 [ "$FAIL" = 0 ]
