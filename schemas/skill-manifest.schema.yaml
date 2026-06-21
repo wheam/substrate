@@ -7,9 +7,9 @@ properties:
   source_agent:    { type: string, description: "回流来源 agent；自己写的可省" }
   created_at:      { type: string, format: date }
   reason:          { type: string, description: "为什么有这个 skill" }
-  target_runtimes: { type: array, items: { type: string }, description: "适配哪些 runtime；取值由实例的 adapter 定义，引擎不钉死具体产品名" }
+  target_runtimes: { type: array, items: { type: string }, description: "适配哪些 runtime；取值由实例的 adapter 定义，引擎不钉死具体产品名。特殊值 'all' = 通配全部 runtime。⚠️ substrate-sync fail-closed：**未声明此字段的 skill 不会被安装**（要全 runtime 请写 [all]）" }
   risk_level:      { enum: [low, medium, high], description: "low=仅读写 markdown；其余见下。⚠️ 对自动回流件，admission 不信任自报值，按 capabilities 重新判定后覆盖" }
-  capabilities:    { type: array, items: { type: string }, description: "如 shell/network/install/secrets/modify-skills" }
+  capabilities:    { type: array, items: { type: string }, description: "capability 词表（substrate-intake 守门据此判风险）—— 安全(可自动晋升): read/write/read-markdown/write-markdown/markdown；危险(一律人工 audit): shell/system/network/install/secrets/modify-skills/modify-governance。白名单外的未知词一律按危险处理。" }
   dependencies:    { type: array, items: { type: string } }
   related_existing_skills: { type: array, items: { type: string } }
 # 准入规则：risk_level=low 可自动晋升；凡 capabilities 含

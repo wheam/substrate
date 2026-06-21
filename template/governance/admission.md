@@ -40,6 +40,11 @@ agent 自总结的 skill 先落 `skills/_incoming/`，由 `substrate-intake` 按
 - **可自动晋升**：只读写 markdown（risk=low、无危险 capability）。
 - **一律转人工 audit**：`capabilities` 含 `shell` / `system` / `network` / `install` / `secrets` / `modify-skills` / `modify-governance` 任一。
 
+> **capability 词表**（`gate.py` 的判定依据）：
+> - **安全（可自动晋升）**：`read` / `write` / `read-markdown` / `write-markdown` / `markdown`。
+> - **危险（一律 audit）**：`shell` / `system` / `network` / `install` / `secrets` / `modify-skills` / `modify-governance`。
+> - **白名单外的未知 capability** 一律按危险处理（fail-closed）。capabilities 键重复、块内夹非列表项行、写了键却无项 → 都转人工，绝不误放。
+
 > 判 skill 还是知识的尺：想**读**它 = 知识（进 knowledge）；想让 agent **反复做**它 = skill（进 skills，过本节守门）。
 
 ## 防御纵深
