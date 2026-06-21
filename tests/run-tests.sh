@@ -167,12 +167,14 @@ import sys; p=sys.argv[1]; t=open(p).read(); open(p,'w').write(t.replace('    wr
 PY
 python3 "$DOC" "$T5" 2>&1 | grep -q "zones 契约" && ok "删 zone 必填字段被 doctor 抓" || bad "doctor 未校验 zones 契约"
 
-echo "== 15) M6: doctor 强制每页 ≥2 互链 =="
+echo "== 15) M6: doctor 把「每页 ≥2 互链」当【建议】——提醒(WARN)但不报错、不影响退出码 =="
 T6="$(mktemp -d)/i"; mkdir -p "$T6"; cp -R "$ENGINE/examples/minimal/." "$T6/"
 python3 - "$T6/knowledge/git.md" <<'PY'
 import sys,re; p=sys.argv[1]; t=open(p).read(); open(p,'w').write(t.replace("[[wikilinks]]","wikilinks"))  # 只剩 1 个 outbound
 PY
-python3 "$DOC" "$T6" 2>&1 | grep -q "互链不足" && ok "只剩 1 个互链的页被抓" || bad "≥2 互链规则未实现"
+OUT6="$(python3 "$DOC" "$T6" 2>&1)"; rc6=$?
+printf '%s' "$OUT6" | grep -q "WARN.*互链不足" && ok "互链不足 报为 WARN（提醒）" || bad "互链不足 未报为 WARN"
+[ "$rc6" = 0 ] && ok "互链不足 不再让 doctor 失败（退出码 0）" || bad "互链不足 仍导致非 0 退出 (rc=$rc6)"
 
 echo "== 16) m1: doctor 不误报 ~~~ 围栏内的 wikilink =="
 T7="$(mktemp -d)/i"; mkdir -p "$T7"; cp -R "$ENGINE/examples/minimal/." "$T7/"
@@ -220,6 +222,32 @@ python3 "$DOC" "$T8" 2>&1 | grep -q "indented-example-missing" && bad "缩进代
 # 防过度剥离：普通正文里的真断链必须仍被抓到（锁住「别把真链接吞掉」）
 printf '\n正文真断链 [[prose-really-missing]] 不在代码里。\n' >> "$T8/knowledge/markdown.md"
 python3 "$DOC" "$T8" 2>&1 | grep -q "prose-really-missing" && ok "正文真断链仍被抓（未漏报）" || bad "正文真断链被漏报（剥过头）"
+
+CUR="$ENGINE/skills/substrate-curator/curate.py"
+echo "== 22) curate reindex: 自动把目录内容页登记进 README 索引（解决索引漂移 + 给入链）=="
+T9="$(mktemp -d)/i"; mkdir -p "$T9/knowledge/concepts"
+printf -- '---\ntitle: Alpha\ncreated: 2026-01-01\nupdated: 2026-01-01\ntype: concept\n---\n# Alpha\n[[beta]]\n' > "$T9/knowledge/concepts/alpha.md"
+printf -- '---\ntitle: Beta\ncreated: 2026-01-01\nupdated: 2026-01-01\ntype: concept\n---\n# Beta\n[[alpha]]\n' > "$T9/knowledge/concepts/beta.md"
+expect_rc 0 "reindex dry-run rc=0" python3 "$CUR" reindex --instance "$T9" --dir knowledge/concepts
+[ -f "$T9/knowledge/concepts/README.md" ] && bad "dry-run 不该写 README" || ok "reindex dry-run 不写盘"
+python3 "$CUR" reindex --instance "$T9" --dir knowledge/concepts --apply >/dev/null 2>&1
+{ grep -q '\[\[alpha\]\]' "$T9/knowledge/concepts/README.md" && grep -q '\[\[beta\]\]' "$T9/knowledge/concepts/README.md"; } && ok "两个页都登记进 README 索引" || bad "页未登记进索引"
+# 幂等：再跑一次不应重复堆叠（仍只各一条）
+python3 "$CUR" reindex --instance "$T9" --dir knowledge/concepts --apply >/dev/null 2>&1
+[ "$(grep -c '\[\[alpha\]\]' "$T9/knowledge/concepts/README.md")" = 1 ] && ok "reindex 幂等（不重复堆叠）" || bad "reindex 重复堆叠了"
+
+echo "== 23) curate rm: 删页 + 自动清全库反向链接（删后 doctor 无新断链）=="
+T10="$(mktemp -d)/i"; mkdir -p "$T10/knowledge/concepts"
+printf -- '---\ntitle: Keep\ncreated: 2026-01-01\nupdated: 2026-01-01\ntype: concept\n---\n# Keep\n见 [[doomed]] 这一篇。\n\n- [[doomed]]\n- [[other]]\n' > "$T10/knowledge/concepts/keep.md"
+printf -- '---\ntitle: Other\ncreated: 2026-01-01\nupdated: 2026-01-01\ntype: concept\n---\n# Other\n[[keep]]\n' > "$T10/knowledge/concepts/other.md"
+printf -- '---\ntitle: Doomed\ncreated: 2026-01-01\nupdated: 2026-01-01\ntype: concept\n---\n# Doomed\n[[keep]] [[other]]\n' > "$T10/knowledge/concepts/doomed.md"
+expect_rc 0 "rm dry-run rc=0" python3 "$CUR" rm --instance "$T10" --page knowledge/concepts/doomed.md
+[ -f "$T10/knowledge/concepts/doomed.md" ] && ok "rm dry-run 不真删" || bad "dry-run 误删了文件"
+python3 "$CUR" rm --instance "$T10" --page knowledge/concepts/doomed.md --apply >/dev/null 2>&1
+[ -f "$T10/knowledge/concepts/doomed.md" ] && bad "rm --apply 未删文件" || ok "页已删除"
+grep -q '\[\[doomed\]\]' "$T10/knowledge/concepts/keep.md" && bad "反向链接 [[doomed]] 未清理（残留断链）" || ok "全库反向链接已清（无残留 [[doomed]]）"
+grep -q '\[\[other\]\]' "$T10/knowledge/concepts/keep.md" && ok "只清指向被删页的链接，别的链接（[[other]]）保留" || bad "误删了无关链接"
+python3 "$DOC" "$T10" 2>&1 | grep -q "断链" && bad "删页后仍有断链" || ok "删页后 doctor 无断链"
 
 echo
 echo "==== 结果: $PASS passed, $FAIL failed ===="

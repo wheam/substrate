@@ -19,7 +19,23 @@
 
 退出码: 0 = 正常; 2 = 调用错误（路径不对/来源不存在等）。
 """
-import sys, os, re, glob, argparse, shutil
+import sys, os, re, glob, argparse, shutil, subprocess
+
+
+def reindex_dirs(instance, reldirs):
+    """落地后自动(重)建受影响目录的 README 文件级索引——调用同级 substrate-curator/curate.py。
+    这样 import 完即有目录可逛（基础索引：每页一条 [[stem]]+标题；摘要/关联可后续人工润色）。"""
+    curate = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                          "substrate-curator", "curate.py")
+    if not os.path.isfile(curate):
+        print("  （未找到 substrate-curator/curate.py；跳过自动建索引。可手动：curate.py reindex --dir <目录> --apply）")
+        return
+    for d in sorted({x for x in reldirs if x}):
+        r = subprocess.run(["python3", curate, "reindex", "--instance", instance, "--dir", d, "--apply"],
+                           capture_output=True, text=True)
+        for l in (r.stdout or "").splitlines():
+            if "README.md" in l:
+                print(f"  索引| {l.strip()}")
 
 DATE_PLACEHOLDER = "YYYY-MM-DD"
 # 文件名里出现这些词的，标 REVIEW（疑似敏感/凭据），dry-run 不默认计入计划、--apply 不搬。
@@ -209,9 +225,14 @@ def main():
     for relpath, why in plan_review:
         print(f"  REVIEW  {relpath}  —  {why}（不自动搬，交人/intake 处理）")
 
+    touched = {os.path.dirname(p["target_rel"]) for p in plan_new} | {os.path.dirname(tr) for _, tr, _ in plan_skip}
+    touched = {d for d in touched if d}
+
     if dry:
         print(f"  → 计划: {len(plan_new)} new, {len(plan_skip)} skip, {len(plan_review)} review"
               f"（DRY-RUN，未动文件）。审核无误后加 --apply 执行。")
+        if touched:
+            print(f"  --apply 时还会自动(重)建这些目录的 README 文件级索引: {', '.join(sorted(touched))}")
         return 0
 
     # ── --apply 执行 ──
@@ -228,13 +249,15 @@ def main():
         applied += 1
         print(f"  [OK] {p['relpath']} -> {p['target_rel']}" + ("  (+frontmatter)" if added else ""))
 
+    if touched:
+        print("  自动(重)建受影响目录的 README 文件级索引：")
+        reindex_dirs(instance, touched)
+
     print(f"  → 搬入 {applied} 个；跳过 {len(plan_skip)}；待审 {len(plan_review)}。")
-    print(f"  下一步: 在 {a.zone}/ 各目录补/更新 zone README（Agent Packet + 文件级索引），"
-          f"再跑 substrate-doctor，最后交集成提交。")
+    print(f"  下一步: 跑 substrate-doctor 复核，按需在各 README 索引块外补 Agent Packet / 摘要，最后交集成提交。")
     if applied:
-        print("  ⚠ 预期: 刚搬入的页若缺 ≥2 个 [[wikilink]]、缺入链、或未登记进同目录 README，")
-        print("    substrate-doctor 会报「孤儿 / 互链不足 / 索引漂移」——这是宪法在要求补链，属正常，")
-        print("    补好互链 + 把页登记进 zone README 后即转绿（import 故意不伪造链接）。")
+        print("  说明: 已自动把搬入的页登记进所在目录 README 索引（解决「索引漂移」+ 让页可被发现）。")
+        print("    互链 <2 现在只是 doctor 的【提醒】(WARN) 不报错；想更连通可手动补 [[wikilink]]。")
     return 0
 
 

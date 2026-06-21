@@ -26,12 +26,25 @@ reason: 读写/维护知识页 + 执行宪法（写内容、跑 git）
    - 文件名全小写、连字符、无空格。
    - 放对 zone 目录。
    - YAML frontmatter 必备（字段以该 zone schema 为准，至少 `title/created/updated/type`）；改页 bump `updated`。
-   - 每页 `[[wikilinks]]` ≥ 2，并给被链页补反向链接。
+   - 每页**建议** `[[wikilinks]]` ≥ 2 并给被链页补反向链接（保持知识图连通）——这是**建议**，doctor 只提醒(WARN)不报错。
    - 矛盾不静默覆盖：保留两方+日期+来源，frontmatter 标 `contested: true`，提请用户复核。
-5. **同步两级索引（硬规则）**：更新所在 zone README 的文件级索引行（文件/摘要/关联）。新增 zone 才动根 README。
+5. **同步两级索引**：更新所在 zone README 的文件级索引。可手动写（补摘要/关联更佳），也可跑
+   `python3 <本 skill 目录>/curate.py reindex --instance <实例根> --dir <目标目录> --apply`
+   自动(重)建该目录 README 的索引块（每页一条）。新增 zone 才动根 README。
 6. **自检**：跑 `python3 <substrate-doctor skill 目录>/doctor.py <实例根>`，修掉所有 ERROR。
 7. **提交**：`git add -A && git commit -m "<说明>" && git push`。
 8. **汇报**：向用户列出本次创建/修改的所有文件。
+
+## 删除一个页（用 curate.py，别手删——会留断链）
+
+删一个内容页时，全库指向它的 `[[wikilink]]` 会变断链。**用 `curate.py rm`**：它删页 + 自动清理全库反向链接（纯导航条目删整行，正文引用去链成纯文本）+ 重建该目录索引。默认 dry-run：
+
+```
+python3 <本 skill 目录>/curate.py rm --instance <实例根> --page <相对路径.md>          # 先看计划
+python3 <本 skill 目录>/curate.py rm --instance <实例根> --page <相对路径.md> --apply   # 确认后执行
+```
+
+删完跑 doctor 复核、再提交。
 
 ## 查询流程
 
