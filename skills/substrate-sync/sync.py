@@ -111,10 +111,22 @@ def adapter_target(adapters_dir, runtime):
     return os.path.expanduser(target), None
 
 def instance_commit(src):
-    """--src 是 <instance>/skills；取实例仓库 HEAD commit（记录/检测 skill 版本对齐用）。非 git 返回 None。"""
+    """实例仓库 HEAD commit（信息性：记录"在哪个版本装的"）。非 git 返回 None。"""
     inst = os.path.dirname(os.path.abspath(src))
     try:
         r = subprocess.run(["git", "-C", inst, "rev-parse", "HEAD"], capture_output=True, text=True)
+        return r.stdout.strip() if r.returncode == 0 else None
+    except Exception:
+        return None
+
+
+def skills_tree(src):
+    """实例 skills/ 子树的 git 对象哈希——**只在 skill 内容变化时才变**（漂移检测用）。
+    这样每次普通内容提交（改知识页等、没动 skill）不会误报"该重 sync"。--src 的 basename 即子树名。"""
+    inst = os.path.dirname(os.path.abspath(src))
+    rel = os.path.basename(os.path.abspath(src))
+    try:
+        r = subprocess.run(["git", "-C", inst, "rev-parse", f"HEAD:{rel}"], capture_output=True, text=True)
         return r.stdout.strip() if r.returncode == 0 else None
     except Exception:
         return None
@@ -132,8 +144,8 @@ def do_check(a):
         man = json.load(open(mpath, encoding="utf-8"))
     except Exception as e:
         print(f"substrate-sync --check: 清单损坏 {mpath}: {e}"); return 2
-    recorded = man.get("instance_commit")
-    cur = instance_commit(a.src)
+    rec_tree = man.get("skills_tree")
+    cur_tree = skills_tree(a.src)
     installed_names = {s.get("name") for s in man.get("installed", [])}
     src_names = set()
     for entry in sorted(os.listdir(a.src)):
@@ -143,13 +155,13 @@ def do_check(a):
     missing = sorted(src_names - installed_names)
 
     print(f"substrate-sync --check  runtime={a.runtime}")
-    print(f"  装机时实例 commit: {recorded or '(未记录)'}")
-    print(f"  实例当前 commit:   {cur or '(非 git/取不到)'}")
+    print(f"  装机时实例 commit: {man.get('instance_commit') or '(未记录)'}")
+    print(f"  skills/ 子树: 装机 {(rec_tree or '(未记录)')[:10]}  当前 {(cur_tree or '(非 git)')[:10]}")
     drift = []
-    if cur and recorded and cur != recorded:
-        drift.append(f"实例已更新（{recorded[:10]} → {cur[:10]}）——skill 可能过时")
-    if cur and not recorded:
-        drift.append("清单未记录 commit（旧版 sync 装的）——建议重 sync 以登记版本")
+    if cur_tree and rec_tree and cur_tree != rec_tree:
+        drift.append("skills/ 自上次同步后有变化（skill 更新/版本升级）——本机 skill 可能过时")
+    if cur_tree and not rec_tree:
+        drift.append("清单未记录 skills_tree（旧版 sync 装的）——建议重 sync 以登记版本")
     if missing:
         drift.append(f"实例有 {len(missing)} 个未安装的 skill: {missing}")
     if drift:
@@ -266,7 +278,8 @@ def main():
             failed.append(p["name"])
 
     mpath = a.manifest or os.path.join(a.target, "installed-skills.json")
-    json.dump({"runtime": a.runtime, "instance_commit": instance_commit(a.src), "installed": installed},
+    json.dump({"runtime": a.runtime, "instance_commit": instance_commit(a.src),
+               "skills_tree": skills_tree(a.src), "installed": installed},
               open(mpath, "w"), ensure_ascii=False, indent=2)
     print(f"  → 装了 {len(installed)} 个；清单写入 {mpath}")
     if failed:

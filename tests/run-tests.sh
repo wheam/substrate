@@ -282,10 +282,14 @@ sh "$ENGINE/init-instance.sh" "$T12" t12 >/dev/null 2>&1
 ( cd "$T12" && git init -q && git -c user.name=t -c user.email=t@t add -A && git -c user.name=t -c user.email=t@t commit -q -m init )
 SKD="$(mktemp -d)"
 CLAUDE_SKILL_DIR="$SKD" python3 "$T12/skills/substrate-sync/sync.py" --src "$T12/skills" --runtime claude-code --apply >/dev/null 2>&1
-grep -q '"instance_commit": "[0-9a-f]' "$SKD/installed-skills.json" && ok "apply 把实例 commit 记进清单" || bad "清单未记录 instance_commit"
+grep -q '"skills_tree": "[0-9a-f]' "$SKD/installed-skills.json" && ok "apply 把 skills/ 子树哈希记进清单" || bad "清单未记录 skills_tree"
 expect_rc 0 "刚装完 --check 报对齐(rc=0)" env CLAUDE_SKILL_DIR="$SKD" python3 "$T12/skills/substrate-sync/sync.py" --src "$T12/skills" --runtime claude-code --check
-( cd "$T12" && echo x>n.md && git -c user.name=t -c user.email=t@t add -A && git -c user.name=t -c user.email=t@t commit -q -m change )
-expect_rc 1 "实例更新后 --check 报漂移(rc=1)" env CLAUDE_SKILL_DIR="$SKD" python3 "$T12/skills/substrate-sync/sync.py" --src "$T12/skills" --runtime claude-code --check
+# 非 skill 提交（改知识页）→ 不应误报漂移（skills/ 子树没变）
+( cd "$T12" && printf -- '---\ntitle: N\ncreated: 2026-01-01\nupdated: 2026-01-01\ntype: note\n---\n[[a]] [[b]]\n' > knowledge/n.md && git -c user.name=t -c user.email=t@t add -A && git -c user.name=t -c user.email=t@t commit -q -m content )
+expect_rc 0 "非 skill 提交后 --check 仍对齐(不误报)" env CLAUDE_SKILL_DIR="$SKD" python3 "$T12/skills/substrate-sync/sync.py" --src "$T12/skills" --runtime claude-code --check
+# 改 skill → 应报漂移
+( cd "$T12" && printf '\n# tweak\n' >> skills/substrate-todo/SKILL.md && git -c user.name=t -c user.email=t@t add -A && git -c user.name=t -c user.email=t@t commit -q -m skillchange )
+expect_rc 1 "skill 变更后 --check 报漂移(rc=1)" env CLAUDE_SKILL_DIR="$SKD" python3 "$T12/skills/substrate-sync/sync.py" --src "$T12/skills" --runtime claude-code --check
 
 echo
 echo "==== 结果: $PASS passed, $FAIL failed ===="
