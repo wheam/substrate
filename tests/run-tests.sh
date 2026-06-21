@@ -12,6 +12,9 @@ SYNC="$ENGINE/skills/substrate-sync/sync.py"
 IMP="$ENGINE/skills/substrate-import/import.py"
 MIG="$ENGINE/skills/substrate-migrate/migrate.py"
 
+# 不让 py_compile / python 往源码目录或只读 HOME 缓存写 pyc（受限环境会 PermissionError）。
+export PYTHONPYCACHEPREFIX="$(mktemp -d)"
+
 PASS=0; FAIL=0
 ok()   { PASS=$((PASS+1)); printf "  ok   - %s\n" "$1"; }
 bad()  { FAIL=$((FAIL+1)); printf "  FAIL - %s\n" "$1"; }
@@ -107,7 +110,7 @@ PY
   git -C "$T" init -q; git -C "$T" config user.email t@t; git -C "$T" config user.name t
   git -C "$T" add -A; git -C "$T" commit -qm init
   python3 "$MIG" --instance "$T" --engine "$FE" --apply --yes >/dev/null 2>&1   # 0001 ok, 0002 fail → 停 0.2.0
-  printf -- '---\ntitle: Precious\ncreated: 2026-06-21\nupdated: 2026-06-21\ntype: concept\n---\n# Precious\n[[git]]\n' > "$T/knowledge/precious.md"
+  printf -- '---\ntitle: Precious\ncreated: 2026-06-21\nupdated: 2026-06-21\ntype: concept\n---\n# Precious\n[[git]] 与 [[markdown]]\n' > "$T/knowledge/precious.md"
   python3 - "$T/knowledge/README.md" <<'PY'
 import sys; p=sys.argv[1]; t=open(p).read(); open(p,'w').write(t.rstrip()+"\n- [[precious]]\n")
 PY
@@ -115,6 +118,66 @@ PY
   python3 "$MIG" --instance "$T" --engine "$FE" --apply --yes >/dev/null 2>&1   # 重试，0002 又失败 → 回滚
   [ -f "$T/knowledge/precious.md" ] && ok "重试回滚保留操作者提交（不丢数据）" || bad "重试回滚吞掉操作者提交（数据丢失）"
 fi
+
+echo "== 10) B1: sync registry name 路径穿越被拒（不删 target 外目录）=="
+if command -v git >/dev/null 2>&1; then
+  UP="$(mktemp -d)/up"; mkdir -p "$UP"
+  ( cd "$UP" && git init -q && git config user.email a@a && git config user.name a && printf 'name: x\n' > SKILL.md && git add -A && git commit -qm x && git tag v1 ) >/dev/null 2>&1
+  WS="$(mktemp -d)"; mkdir -p "$WS/target" "$WS/victim"; printf 'precious\n' > "$WS/victim/marker.txt"
+  REG="$WS/reg.md"; printf '```yaml\nregistry:\n  - name: ../victim\n    upstream_git_url: file://%s\n    pin: v1\n    target_runtimes: [claude-code]\n```\n' "$UP" > "$REG"
+  python3 "$SYNC" --src "$ENGINE/skills" --target "$WS/target" --runtime claude-code --registry "$REG" --apply >/dev/null 2>&1
+  [ -f "$WS/victim/marker.txt" ] && ok "name: ../victim 被拒，target 外目录未被删/写" || bad "路径穿越仍可删 target 外目录"
+fi
+
+echo "== 11) B2: import 正文裸 sk-proj 密钥 → REVIEW =="
+SRC="$(mktemp -d)/s"; mkdir -p "$SRC"; INST="$(mktemp -d)/i"; mkdir -p "$INST"
+printf '# OpenAI\nOpenAI key: sk-proj-AbCd1234EfGh5678IjKl9012MnOp\n' > "$SRC/openai.md"
+python3 "$IMP" --source "$SRC" --instance "$INST" --date 2026-06-21 2>&1 | grep -q "REVIEW  openai.md" && ok "裸 sk-proj 密钥判 REVIEW（不入库）" || bad "裸 sk-proj 密钥漏放"
+
+echo "== 12) M3: migrate 链未抵达 ENGINE_VERSION → 拒绝 =="
+FE2="$(mktemp -d)/e"; mkdir -p "$FE2/migrations" "$FE2/skills/substrate-doctor"
+printf '0.3.0\n' > "$FE2/ENGINE_VERSION"; cp "$DOC" "$FE2/skills/substrate-doctor/doctor.py"
+cp -R "$ENGINE/migrations/0001-knowledge-tags-field" "$FE2/migrations/"   # 链只到 0.2.0
+T3="$(mktemp -d)/i"; mkdir -p "$T3"; cp -R "$ENGINE/examples/minimal/." "$T3/"; printf '0.1.0\n' > "$T3/governance/SUBSTRATE_VERSION"
+expect_rc 1 "链止于0.2.0而引擎0.3.0 → 拒绝(RC1)" python3 "$MIG" --instance "$T3" --engine "$FE2"
+
+echo "== 13) M4: 中间提交失败则回滚中止、不误报成功 =="
+if command -v git >/dev/null 2>&1; then
+  FE4="$(mktemp -d)/e"; mkdir -p "$FE4/migrations" "$FE4/skills/substrate-doctor"
+  printf '0.3.0\n' > "$FE4/ENGINE_VERSION"; cp "$DOC" "$FE4/skills/substrate-doctor/doctor.py"
+  cp -R "$ENGINE/migrations/0001-knowledge-tags-field" "$FE4/migrations/"
+  mkdir -p "$FE4/migrations/0002-ok"
+  printf 'id: 0002-ok\nfrom_version: "0.2.0"\nto_version: "0.3.0"\ntitle: ok\nrisk_level: low\nidempotent: true\nsteps:\n  - {action: x, verify: y}\n' > "$FE4/migrations/0002-ok/migration.yaml"
+  printf 'import sys\nsys.exit(0)\n' > "$FE4/migrations/0002-ok/apply.py"
+  T4="$(mktemp -d)/i"; mkdir -p "$T4"; cp -R "$ENGINE/examples/minimal/." "$T4/"; printf '0.1.0\n' > "$T4/governance/SUBSTRATE_VERSION"
+  python3 - "$T4/knowledge/git.md" <<'PY'
+import sys,re; p=sys.argv[1]; t=open(p).read(); open(p,'w').write(re.sub(r'(?m)^tags:.*\n','',t,count=1))
+PY
+  git -C "$T4" init -q; git -C "$T4" config user.email t@t; git -C "$T4" config user.name t; git -C "$T4" add -A; git -C "$T4" commit -qm init
+  printf '#!/bin/sh\nexit 1\n' > "$T4/.git/hooks/pre-commit"; chmod +x "$T4/.git/hooks/pre-commit"   # 让中间提交失败
+  out="$(python3 "$MIG" --instance "$T4" --engine "$FE4" --apply --yes 2>&1)"; rc=$?
+  v="$(cat "$T4/governance/SUBSTRATE_VERSION")"
+  if [ "$rc" = 1 ] && [ "$v" = "0.1.0" ] && ! printf '%s' "$out" | grep -q "✅ 全部"; then ok "中间提交被 hook 拒 → 回滚中止、不误报成功（停 0.1.0）"; else bad "中间提交失败处理不当 (rc=$rc v=$v)"; fi
+fi
+
+echo "== 14) M5: doctor 校验 zones 必填字段 =="
+T5="$(mktemp -d)/i"; mkdir -p "$T5"; cp -R "$ENGINE/examples/minimal/." "$T5/"
+python3 - "$T5/governance/zones.md" <<'PY'
+import sys; p=sys.argv[1]; t=open(p).read(); open(p,'w').write(t.replace('    writers: [all]\n','',1))
+PY
+python3 "$DOC" "$T5" 2>&1 | grep -q "zones 契约" && ok "删 zone 必填字段被 doctor 抓" || bad "doctor 未校验 zones 契约"
+
+echo "== 15) M6: doctor 强制每页 ≥2 互链 =="
+T6="$(mktemp -d)/i"; mkdir -p "$T6"; cp -R "$ENGINE/examples/minimal/." "$T6/"
+python3 - "$T6/knowledge/git.md" <<'PY'
+import sys,re; p=sys.argv[1]; t=open(p).read(); open(p,'w').write(t.replace("[[wikilinks]]","wikilinks"))  # 只剩 1 个 outbound
+PY
+python3 "$DOC" "$T6" 2>&1 | grep -q "互链不足" && ok "只剩 1 个互链的页被抓" || bad "≥2 互链规则未实现"
+
+echo "== 16) m1: doctor 不误报 ~~~ 围栏内的 wikilink =="
+T7="$(mktemp -d)/i"; mkdir -p "$T7"; cp -R "$ENGINE/examples/minimal/." "$T7/"
+printf '\n~~~\n[[totally-missing-page]]\n~~~\n' >> "$T7/knowledge/git.md"
+python3 "$DOC" "$T7" 2>&1 | grep -q "totally-missing-page" && bad "~~~ 围栏内 wikilink 被误判断链" || ok "~~~ 围栏内 wikilink 不误报"
 
 echo
 echo "==== 结果: $PASS passed, $FAIL failed ===="

@@ -36,9 +36,11 @@ python3 <本 skill 目录>/doctor.py <实例根目录>
 |---|---|
 | 断链 | `[[wikilink]]` 指向不存在的页（**先剥 inline code/代码块**；路径式链接 `[[a/b]]` 必须按路径命中，不退回 basename 兜底；`skills/` 里的 `[[..]]` 视为示例不计入图） |
 | 孤儿 | 内容页无任何入链（**豁免** governance/、`skills/`、README、`_` 前缀、`by-*` 分片） |
+| 互链 <2 | 内容页 outbound `[[wikilink]]` 去重后 <2（宪法第 5 条硬规则；同上豁免集，排除自链/code） |
 | frontmatter | 内容页缺 `title/created/updated/type`（同上豁免集） |
 | 索引漂移 | 同目录有 README.md 时，内容兄弟页须登记在该 README（整词匹配 `.md`） |
 | 计数漂移 | **与 `data.csv` 同目录的索引页**声称的「N 条/rows」≠ 主表行数（分类分片 `by-*/` 天然是子集，不参与此校验） |
+| zones 契约 | `governance/zones.md` 每个 zone 缺 `path/schema/maintainer_skill/readers/writers` 必填字段、或 id 重复（ERROR）；path 不存在（WARN） |
 | registry | `skills/_registry.md` 条目缺 `pin`（ERROR）；pin 是 main/master/HEAD 却未声明 `trusted_floating: true`（WARN） |
 | skill 清单（warn） | `skills/<name>/SKILL.md` 应是合规 manifest（缺 `name/target_runtimes/risk_level` → WARN，见 skill-manifest.schema） |
 | 毕业（advice） | 收藏行数 > `zones.md` `graduation: rows>N` 阈值 |

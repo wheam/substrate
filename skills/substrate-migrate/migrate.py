@@ -347,6 +347,12 @@ def main(argv):
             return 1
         chain_from = m["to_t"]
 
+    # 链条必须抵达引擎版本，否则即使全部应用，实例仍落后于引擎却会被报成功。
+    if chain_from != eng_v_t:
+        log(f"  [ERROR] 迁移链未抵达引擎版本：链止于 {pending[-1]['to']}，但 ENGINE_VERSION={eng_ver.strip()}。")
+        log(f"          区间内缺少抵达引擎版本的迁移；拒绝继续（避免迁完仍落后却报成功）。请人工核对引擎 migrations/。")
+        return 1
+
     if not a.apply:
         log(f"  → DRY-RUN：以上为迁移计划，未执行。确认后加 --apply 真正迁移。")
         return 0
@@ -412,8 +418,20 @@ def main(argv):
         # 为让下一个迁移的回滚点正确，若还有后续迁移，需要一个提交锚点：
         # 我们用一个轻量提交，集成者可 squash/amend。
         if m is not pending[-1]:
-            git(instance, "add", "-A", check=False)
-            git(instance, "commit", "-m", f"substrate-migrate: {mid} ({m['from']}->{m['to']})", check=False)
+            ar = git(instance, "add", "-A", check=False)
+            cr = git(instance, "commit", "-m", f"substrate-migrate: {mid} ({m['from']}->{m['to']})", check=False)
+            if ar.returncode != 0 or cr.returncode != 0:
+                # 中间提交失败（缺 git 身份 / pre-commit hook 拒绝等）：绝不能继续——否则下个 tag 锚点错位，
+                # 后续失败会回滚掉这个「已成功」的迁移且报告失真。回滚本迁移、停在上一个版本、转人工。
+                emsg = ((cr.stderr or "") or (ar.stderr or "")).strip()
+                log(f"  [ERROR] 中间提交失败（add rc={ar.returncode} commit rc={cr.returncode}）：{emsg}")
+                git(instance, "reset", "--hard", tag, check=False)
+                git(instance, "clean", "-fd", check=False)
+                log(f"  已回滚 {mid} 到 {tag} 并中止。常见原因：未配置 git 身份 / pre-commit hook 失败——修复后重跑。")
+                done = [x["id"] for x in pending[:pending.index(m)]]
+                if done:
+                    log(f"  注意：先前迁移 {done} 已成功并各自 commit，实例停在版本 {m['from']}。")
+                return 1
             log(f"  中间提交（锚定下一迁移的回滚点；集成者可 squash）。")
 
     log(f"  ✅ 全部 {len(pending)} 个迁移成功。SUBSTRATE_VERSION 现为 {pending[-1]['to']}。")
