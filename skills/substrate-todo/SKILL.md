@@ -1,6 +1,6 @@
 ---
 name: substrate-todo
-target_runtimes: [claude-code]
+target_runtimes: [all]
 risk_level: medium
 capabilities: [shell]
 reason: 维护实例根的 TODO.md 待办清单（改文件、跑 git）

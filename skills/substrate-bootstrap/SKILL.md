@@ -1,6 +1,6 @@
 ---
 name: substrate-bootstrap
-target_runtimes: [claude-code]
+target_runtimes: [all]
 risk_level: medium
 capabilities: [shell]
 reason: 新 agent 自举 + 新机首次接入（git、调用 sync）

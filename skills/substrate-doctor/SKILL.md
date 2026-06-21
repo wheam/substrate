@@ -1,6 +1,6 @@
 ---
 name: substrate-doctor
-target_runtimes: [claude-code]
+target_runtimes: [all]
 risk_level: medium
 capabilities: [shell]
 reason: 防退化体检 + 迁移测试套件（只读：运行确定性 shell，不改内容）

@@ -1,6 +1,6 @@
 ---
 name: substrate-intake
-target_runtimes: [claude-code]
+target_runtimes: [all]
 risk_level: medium
 capabilities: [shell]
 reason: 内容分类器 + 自动回流 skill 守门（只读判定：跑确定性脚本，不改内容）

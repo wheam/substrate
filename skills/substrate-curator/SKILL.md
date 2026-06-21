@@ -1,6 +1,6 @@
 ---
 name: substrate-curator
-target_runtimes: [claude-code]
+target_runtimes: [all]
 risk_level: medium
 capabilities: [shell]
 reason: 读写/维护知识页 + 执行宪法（写内容、跑 git）
