@@ -223,7 +223,10 @@ Claude Code「用」一个 skill = 该 skill 在它的 skill 目录（`~/.claude
 | `substrate-memory` | 共享记忆读写 + 共享/本地边界 |
 | `substrate-todo` | 待办维护 |
 
-> 自托管：clone 实例即同时拿到维护工具，bootstrap 一气呵成。
+> **自托管（vendor 进实例）**：`init-instance.sh` 脚手架新实例时，会把这套 substrate-* **拷进实例 `skills/`**，
+> 所以 **clone 实例即同时拿到维护工具**、bootstrap 一气呵成（且实例自带 `sync.py`，无鸡生蛋）。
+> 引擎仍是单一事实源：升级时 `init-instance.sh --refresh <实例>` 刷新这份 vendored 副本，再跑 `substrate-migrate`。
+> 注意：**migrations/ 不 vendor**——跨版本升级仍需引擎仓库在场（迁移是引擎侧操作）。
 
 ---
 
