@@ -1,6 +1,6 @@
 ---
 name: substrate-migrate
-target_runtimes: [claude-code]
+target_runtimes: [all]
 risk_level: high
 capabilities: [shell, modify-governance]
 reason: 跨引擎版本安全迁移——打 git tag / 改实例内容 / 改 governance 版本 / 可 reset --hard 回滚（见 BUILD-PLAN §9）

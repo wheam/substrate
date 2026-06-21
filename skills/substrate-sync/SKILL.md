@@ -1,6 +1,6 @@
 ---
 name: substrate-sync
-target_runtimes: [claude-code]
+target_runtimes: [all]
 risk_level: high
 capabilities: [shell, network, install]
 reason: 把 skill 装进各 runtime 的 skill 目录（拷文件、按 pin 从网络 clone、写本地清单）

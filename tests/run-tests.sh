@@ -249,6 +249,13 @@ grep -q '\[\[doomed\]\]' "$T10/knowledge/concepts/keep.md" && bad "反向链接 
 grep -q '\[\[other\]\]' "$T10/knowledge/concepts/keep.md" && ok "只清指向被删页的链接，别的链接（[[other]]）保留" || bad "误删了无关链接"
 python3 "$DOC" "$T10" 2>&1 | grep -q "断链" && bad "删页后仍有断链" || ok "删页后 doctor 无断链"
 
+echo "== 24) substrate-* 维护 skill 是 runtime 中立（target [all]）→ 也装进非 claude-code runtime（如 hermes）=="
+# 多 runtime 共享层的前提：每个 runtime 都能拿到维护 skill。锁住「不再只 for claude-code」。
+grep -L "^target_runtimes: \[all\]" "$ENGINE"/skills/substrate-*/SKILL.md | grep -q . \
+  && bad "有 substrate-* 未声明 target [all]" || ok "全部 substrate-* 都是 target [all]"
+OUT24="$(CLAUDE_SKILL_DIR=x HERMES_SKILL_DIR="$(mktemp -d)" python3 "$SYNC" --src "$ENGINE/skills" --runtime hermes 2>&1)"
+printf '%s' "$OUT24" | grep -q "install substrate-doctor" && ok "substrate-doctor 计划装进 hermes runtime" || bad "substrate-* 未装进 hermes"
+
 echo
 echo "==== 结果: $PASS passed, $FAIL failed ===="
 [ "$FAIL" = 0 ]

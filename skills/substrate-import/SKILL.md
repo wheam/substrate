@@ -1,6 +1,6 @@
 ---
 name: substrate-import
-target_runtimes: [claude-code]
+target_runtimes: [all]
 risk_level: medium
 capabilities: [shell]
 reason: 批量把已有内容搬进新实例（拷文件、补 frontmatter、跑 doctor、交集成提交）

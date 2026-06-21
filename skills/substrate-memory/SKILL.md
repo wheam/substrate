@@ -1,6 +1,6 @@
 ---
 name: substrate-memory
-target_runtimes: [claude-code]
+target_runtimes: [all]
 risk_level: medium
 capabilities: [shell]
 reason: 读写跨 agent「关于主人」的共享记忆页 + 执行共享/本地边界判定（写内容、跑 git）

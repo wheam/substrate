@@ -1,6 +1,6 @@
 ---
 name: substrate-collections
-target_runtimes: [claude-code]
+target_runtimes: [all]
 risk_level: medium
 capabilities: [shell]
 reason: 维护 collections zone 的行式 canonical（写 data.csv）+ 同步人读分片/计数 + 跑 git
