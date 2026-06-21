@@ -201,6 +201,17 @@ find "$INST" -name __pycache__ | grep -q . && bad "vendor 带进了 __pycache__"
 expect_rc 0 "自包含实例 doctor 0 error" python3 "$DOC" "$INST"
 sh "$ENGINE/init-instance.sh" --refresh "$INST" >/dev/null 2>&1 && ok "--refresh 刷新 vendored skill 成功" || bad "--refresh 失败"
 
+echo "== 20) MAJOR: 自包含实例不带 --target 跑 vendored sync → 从同级 adapters 推断目标（不再 exit 2）=="
+INST2="$(mktemp -d)/myi2"
+sh "$ENGINE/init-instance.sh" "$INST2" t2 >/dev/null 2>&1
+[ -f "$INST2/adapters/claude-code/adapter.yaml" ] && ok "adapters 已 vendor 进实例" || bad "adapters 未 vendor 进实例"
+# 关键：用【实例内】vendored 的 sync.py、不传 --target，应从实例同级 adapters/ 推断成功（dry-run rc=0）。
+OUT2="$(CLAUDE_SKILL_DIR="$(mktemp -d)" python3 "$INST2/skills/substrate-sync/sync.py" --src "$INST2/skills" --runtime claude-code 2>&1)"; rc2=$?
+[ "$rc2" = 0 ] && ok "vendored sync 无 --target 推断成功（rc=0，不再 exit 2）" || bad "vendored sync 无 --target 仍失败 (rc=$rc2)"
+printf '%s' "$OUT2" | grep -q "从 adapter 推断为" && ok "确实从 vendored adapter 推断出 target" || bad "未从 vendored adapter 推断 target"
+printf '%s' "$OUT2" | grep -q "install substrate-doctor" && ok "列出 own skill 安装计划" || bad "未列出 own skill 安装计划"
+expect_rc 0 "vendor adapters 后实例 doctor 仍 0 error" python3 "$DOC" "$INST2"
+
 echo
 echo "==== 结果: $PASS passed, $FAIL failed ===="
 [ "$FAIL" = 0 ]
