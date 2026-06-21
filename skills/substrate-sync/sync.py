@@ -50,26 +50,35 @@ def selected(runtimes, runtime):
     return ("all" in runtimes) or (runtime in runtimes)
 
 def parse_registry(path, runtime):
-    """返回 (entries, undeclared, rejected)。entries=选中本 runtime 的；undeclared=未声明 target_runtimes 的；rejected=skill 名非法（路径穿越防护）的。"""
-    if not path or not os.path.isfile(path): return [], [], []
+    """返回 (git_entries, plugins, undeclared, rejected)。
+    git_entries=kind:git 且选中本 runtime（待 clone）；plugins=kind:plugin（插件机制管理，sync 不 clone，仅登记）；
+    undeclared=未声明 target_runtimes 的；rejected=skill 名非法（路径穿越防护）的。"""
+    if not path or not os.path.isfile(path): return [], [], [], []
     t = open(path, encoding="utf-8-sig", errors="replace").read()
     m = re.search(r"```yaml\n(.*?)```", t, re.S)
     block = "\n".join(l for l in (m.group(1) if m else "").splitlines() if not l.lstrip().startswith("#"))
-    out, undeclared, rejected = [], [], []
+    out, plugins, undeclared, rejected = [], [], [], []
     for chunk in re.split(r"(?m)^\s*-\s+name:", block)[1:]:
         name = chunk.splitlines()[0].strip().strip("'\"")
-        url = (re.search(r"(?m)^\s*upstream_git_url:\s*(\S+)", chunk) or [None, None])[1]
-        pinm = re.search(r"(?m)^\s*pin:\s*(\S+)", chunk)
+        kindm = re.search(r"(?m)^\s*kind:\s*(\S+)", chunk)
+        kind = (kindm.group(1).strip("'\"") if kindm else "git")
         rts = field(chunk, "target_runtimes")   # 整块解析，含缩进/多行列表形式
-        if not url:
-            continue
         if not safe_name(name):
             rejected.append(name); continue       # 防路径穿越：非法 skill 名直接拒绝
         if not rts:
             undeclared.append(name); continue    # fail-closed：未声明 target_runtimes 不装
-        if selected(rts, runtime):
-            out.append({"name": name, "url": url, "pin": pinm.group(1) if pinm else None})
-    return out, undeclared, rejected
+        if not selected(rts, runtime):
+            continue
+        if kind == "plugin":
+            src = (re.search(r"(?m)^\s*source:\s*(.+?)\s*$", chunk) or [None, None])[1]
+            plugins.append({"name": name, "source": (src.strip().strip("'\"") if src else None)})
+            continue
+        url = (re.search(r"(?m)^\s*upstream_git_url:\s*(\S+)", chunk) or [None, None])[1]
+        pinm = re.search(r"(?m)^\s*pin:\s*(\S+)", chunk)
+        if not url:
+            continue
+        out.append({"name": name, "url": url, "pin": pinm.group(1) if pinm else None})
+    return out, plugins, undeclared, rejected
 
 def adapter_target(adapters_dir, runtime):
     """从 adapters/<runtime>/adapter.yaml 推断 skill 安装目录。返回 (target|None, err|None)。"""
@@ -136,18 +145,21 @@ def main():
         else:
             skipped.append(entry)
 
-    plan_reg, reg_undeclared, reg_rejected = parse_registry(a.registry, a.runtime)
+    plan_reg, plugins, reg_undeclared, reg_rejected = parse_registry(a.registry, a.runtime)
     undeclared += [f"registry:{n}" for n in reg_undeclared]
 
     print(f"substrate-sync  runtime={a.runtime}  target={a.target}  mode={'DRY-RUN' if dry else 'APPLY'}")
     for p in plan_own: print(f"  own      install {p['name']}  ({p['variant']})")
     for p in plan_reg: print(f"  registry {'clone' if p['pin'] else 'SKIP(no-pin!)'} {p['name']}  {p['url']}@{p['pin']}")
+    for p in plugins:  print(f"  plugin   {p['name']}  (kind=plugin；由插件机制管理，sync 不安装/更新；source={p['source'] or '?'})")
     for s in skipped:  print(f"  skip     {s}  (runtime 不匹配)")
     for u in undeclared: print(f"  skip     {u}  (未声明 target_runtimes；要装请写 [all] 或含本 runtime)")
     for n in reg_rejected: print(f"  REJECT   {n!r}  (非法 skill 名，疑似路径穿越——拒绝安装)")
 
     if dry:
-        print(f"  → 计划 {len(plan_own)} own + {len(plan_reg)} registry（dry-run，未执行）")
+        print(f"  → 计划 {len(plan_own)} own + {len(plan_reg)} registry-git"
+              + (f"（另 {len(plugins)} 个 kind=plugin 不由 sync 装）" if plugins else "")
+              + "（dry-run，未执行）")
         return 0
 
     os.makedirs(a.target, exist_ok=True)

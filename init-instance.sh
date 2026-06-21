@@ -1,0 +1,67 @@
+#!/bin/sh
+# init-instance.sh —— 从引擎脚手架一个【自包含】Substrate 实例。
+# 自包含 = 把引擎的 substrate-* 维护 skill **vendor（拷）进实例 skills/**，
+# 这样 clone 实例即同时拿到维护工具（BUILD-PLAN §13 的本意）；日常维护不再依赖引擎仓库在场。
+# （注意：跨引擎版本【升级/迁移】仍需引擎仓库——migrations/ 不 vendor，见文末。）
+#
+# 用法:
+#   ./init-instance.sh <目标目录> [实例名]       # 脚手架新实例（template + vendored 维护 skill）
+#   ./init-instance.sh --refresh <实例目录>      # 仅刷新实例里 vendored 的 substrate-*（引擎升级后用）
+#
+# 退出码: 0 成功 / 2 调用错误。
+set -eu
+
+ENGINE="$(cd "$(dirname "$0")" && pwd)"
+
+vendor_skills() {   # $1 = 实例 skills/ 目录
+  dest_skills="$1"
+  for d in "$ENGINE"/skills/*/; do
+    [ -d "$d" ] || continue
+    name="$(basename "$d")"
+    rm -rf "$dest_skills/$name"
+    cp -R "$d" "$dest_skills/$name"
+    rm -rf "$dest_skills/$name/__pycache__"   # 别把字节码缓存带进实例
+  done
+}
+
+# ── 刷新模式（引擎升级后重新 vendor）──
+if [ "${1:-}" = "--refresh" ]; then
+  DEST="${2:?用法: init-instance.sh --refresh <实例目录>}"
+  [ -d "$DEST/skills" ] || { echo "不是实例目录（无 skills/）: $DEST" >&2; exit 2; }
+  vendor_skills "$DEST/skills"
+  echo "已把 vendored 维护 skill 刷新到引擎当前版本（ENGINE_VERSION=$(cat "$ENGINE/ENGINE_VERSION")）。"
+  echo "下一步：重跑 sync 把更新装进 runtime，并跑 doctor 自检。"
+  exit 0
+fi
+
+# ── 脚手架新实例 ──
+DEST="${1:?用法: init-instance.sh <目标目录> [实例名]}"
+NAME="${2:-$(basename "$DEST")}"
+[ -e "$DEST" ] && { echo "目标已存在，拒绝覆盖: $DEST" >&2; exit 2; }
+
+mkdir -p "$DEST"
+cp -R "$ENGINE/template/." "$DEST/"
+vendor_skills "$DEST/skills"
+
+# 填实例名占位（python3 替换，避免 sed 的 BSD/GNU 差异）
+python3 - "$DEST/README.md" "$NAME" <<'PY'
+import sys
+p, name = sys.argv[1], sys.argv[2]
+t = open(p, encoding="utf-8").read().replace("{{INSTANCE_NAME}}", name)
+open(p, "w", encoding="utf-8").write(t)
+PY
+
+n_vendored="$(ls -d "$DEST"/skills/substrate-* 2>/dev/null | wc -l | tr -d ' ')"
+echo "✅ 实例已脚手架: $DEST"
+echo "   实例名: $NAME   基于引擎版本: $(cat "$ENGINE/ENGINE_VERSION")"
+echo "   已 vendor 维护 skill: $n_vendored 个（实例自包含，clone 即带工具）"
+echo ""
+echo "下一步："
+echo "  1) cd \"$DEST\" && git init && git add -A && git commit -m 'init substrate instance'"
+echo "  2) 装 skill 到本 runtime（先 dry-run，再 --apply）："
+echo "     python3 \"$DEST/skills/substrate-sync/sync.py\" --src \"$DEST/skills\" --runtime claude-code"
+echo "  3) 体检： python3 \"$DEST/skills/substrate-doctor/doctor.py\" \"$DEST\""
+echo ""
+echo "升级引擎到本实例时（仍需引擎仓库）："
+echo "  - git pull 引擎 → ./init-instance.sh --refresh \"$DEST\" 刷新 vendored skill"
+echo "  - 再跑 substrate-migrate 把数据/布局迁到新版本（--engine 指向引擎仓库）。"
