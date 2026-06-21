@@ -6,6 +6,16 @@
 
 ```yaml
 zones:
+  - id: todo
+    path: todo/
+    purpose: 待办清单（主人一个 owner.md + 每个 agent 一个，per-agent 由 fleet 派生）
+    schema: todo-zone-v1
+    maintainer_skill: substrate-todo
+    readers: [all]
+    writers: [all]
+    disposition: canonical
+    privacy: private
+
   - id: knowledge
     path: knowledge/
     purpose: 互链知识页（分类由本实例自定，如 concept/entity/comparison/insight）

@@ -17,6 +17,7 @@
 | collections/ | 收藏 | collections/README.md |
 | memory/ | 共享记忆 | memory/about-owner/README.md |
 | projects/ | 个人项目 | projects/README.md |
+| todo/ | 待办（主人 + 每个 agent 一份） | todo/README.md |
 | skills/ | skill 分发 | skills/README.md |
 | raw/ | 原始素材（只读） | raw/README.md |
 
