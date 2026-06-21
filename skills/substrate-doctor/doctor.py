@@ -27,7 +27,8 @@ def read_text(p):
         return None
 
 def strip_code(t):
-    t = re.sub(r"```.*?```", "", t, flags=re.S)   # fenced blocks
+    t = re.sub(r"```.*?```", "", t, flags=re.S)   # fenced blocks (backtick)
+    t = re.sub(r"~~~.*?~~~", "", t, flags=re.S)   # fenced blocks (tilde)
     t = re.sub(r"`[^`]*`", "", t)                 # inline code
     return t
 
@@ -120,6 +121,15 @@ def main(root):
         if inbound[m] == 0:
             err(f"孤儿  {rel(root,m)}（无任何入链 wikilink）")
 
+    # 2b) 互链 ≥2（宪法硬规则：每页至少链到 2 个相关页；剥 code、排除自链；豁免结构页与 skills/）
+    for m in mds:
+        if is_structural(root, m) or under(root, m, "skills"): continue
+        self_stem = os.path.splitext(os.path.basename(m))[0]
+        outs = {re.sub(r"\.md$", "", os.path.basename(t)) for t in wikilink_targets(texts[m])}
+        outs.discard(self_stem)
+        if len(outs) < 2:
+            err(f"互链不足  {rel(root,m)} 只链到 {len(outs)} 个页（宪法要求每页 ≥2 个 [[wikilink]]）")
+
     # 3) frontmatter 合规（内容页）
     for m in mds:
         if is_structural(root, m): continue
@@ -154,6 +164,28 @@ def main(root):
             for claimed in re.findall(r"\*\*\s*(\d+)\s*\*\*\s*(?:条|rows|entries)", texts.get(page) or read_text(page) or ""):
                 if int(claimed) != n:
                     err(f"计数漂移  {rel(root,page)} 声称 {claimed}，但 {rel(root,csvf)} 有 {n} 行")
+
+    # 5b) zones 契约校验（schema 必填字段在场 + id 唯一 + path 存在）——doctor 解析治理契约，不空过。
+    zones_f = os.path.join(root, "governance", "zones.md")
+    if os.path.isfile(zones_f):
+        zt = read_text(zones_f) or ""
+        ym = re.search(r"```yaml\n(.*?)```", zt, re.S)
+        zblock = ym.group(1) if ym else ""
+        seen_ids = set()
+        for chunk in re.split(r"(?m)^\s*-\s+id:", zblock)[1:]:
+            zid = chunk.splitlines()[0].strip().strip("'\"")
+            present = set(re.findall(r"(?m)^\s*([A-Za-z_][\w-]*)\s*:", chunk)) | {"id"}
+            if not zid:
+                err(f"zones 契约: 有 zone 条目缺 id 值  ({rel(root,zones_f)})"); continue
+            if zid in seen_ids:
+                err(f"zones 契约: zone id 重复  {zid}  ({rel(root,zones_f)})")
+            seen_ids.add(zid)
+            miss = [k for k in ("path", "schema", "maintainer_skill", "readers", "writers") if k not in present]
+            if miss:
+                err(f"zones 契约: zone '{zid}' 缺必填字段 {', '.join(miss)}  ({rel(root,zones_f)})")
+            pm = re.search(r"(?m)^\s*path:\s*(\S+)", chunk)
+            if pm and not os.path.isdir(os.path.join(root, pm.group(1).strip("'\"").rstrip("/"))):
+                warn(f"zones 契约: zone '{zid}' 的 path '{pm.group(1)}' 在实例里不存在  ({rel(root,zones_f)})")
 
     # 6) registry pin（缺 pin = ERROR；pin 是 main/master/HEAD 这类移动 ref 却未声明 trusted_floating=ERROR→WARN）
     reg = os.path.join(root, "skills", "_registry.md")
