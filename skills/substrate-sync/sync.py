@@ -19,6 +19,18 @@
 """
 import sys, os, re, json, shutil, argparse, subprocess
 
+# skill 名必须是单段安全标识符；防 registry 写 `name: ../victim` 这类路径穿越（删/写 target 外目录）。
+SKILL_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+
+def safe_name(name):
+    return bool(name) and name not in (".", "..") and SKILL_NAME_RE.match(name) is not None
+
+def within_target(target, dest):
+    """dest 必须落在 target 子树内（realpath 防符号链接绕过）——破坏性操作前的兜底。"""
+    rt = os.path.realpath(target)
+    rd = os.path.realpath(dest)
+    return rd == rt or rd.startswith(rt + os.sep)
+
 def field(text, key):
     """读列表字段。容忍 key 行前导缩进（registry 条目里 key 是缩进在 `- name:` 下的）。"""
     m = re.search(rf"(?m)^[ \t]*{key}:[ \t]*\[(.*?)\]", text)
@@ -38,24 +50,26 @@ def selected(runtimes, runtime):
     return ("all" in runtimes) or (runtime in runtimes)
 
 def parse_registry(path, runtime):
-    """返回 (entries, undeclared)。entries 是选中本 runtime 的；undeclared 是未声明 target_runtimes 被跳过的。"""
-    if not path or not os.path.isfile(path): return [], []
+    """返回 (entries, undeclared, rejected)。entries=选中本 runtime 的；undeclared=未声明 target_runtimes 的；rejected=skill 名非法（路径穿越防护）的。"""
+    if not path or not os.path.isfile(path): return [], [], []
     t = open(path, encoding="utf-8-sig", errors="replace").read()
     m = re.search(r"```yaml\n(.*?)```", t, re.S)
     block = "\n".join(l for l in (m.group(1) if m else "").splitlines() if not l.lstrip().startswith("#"))
-    out, undeclared = [], []
+    out, undeclared, rejected = [], [], []
     for chunk in re.split(r"(?m)^\s*-\s+name:", block)[1:]:
-        name = chunk.splitlines()[0].strip()
+        name = chunk.splitlines()[0].strip().strip("'\"")
         url = (re.search(r"(?m)^\s*upstream_git_url:\s*(\S+)", chunk) or [None, None])[1]
         pinm = re.search(r"(?m)^\s*pin:\s*(\S+)", chunk)
         rts = field(chunk, "target_runtimes")   # 整块解析，含缩进/多行列表形式
         if not url:
             continue
+        if not safe_name(name):
+            rejected.append(name); continue       # 防路径穿越：非法 skill 名直接拒绝
         if not rts:
             undeclared.append(name); continue    # fail-closed：未声明 target_runtimes 不装
         if selected(rts, runtime):
             out.append({"name": name, "url": url, "pin": pinm.group(1) if pinm else None})
-    return out, undeclared
+    return out, undeclared, rejected
 
 def adapter_target(adapters_dir, runtime):
     """从 adapters/<runtime>/adapter.yaml 推断 skill 安装目录。返回 (target|None, err|None)。"""
@@ -122,7 +136,7 @@ def main():
         else:
             skipped.append(entry)
 
-    plan_reg, reg_undeclared = parse_registry(a.registry, a.runtime)
+    plan_reg, reg_undeclared, reg_rejected = parse_registry(a.registry, a.runtime)
     undeclared += [f"registry:{n}" for n in reg_undeclared]
 
     print(f"substrate-sync  runtime={a.runtime}  target={a.target}  mode={'DRY-RUN' if dry else 'APPLY'}")
@@ -130,6 +144,7 @@ def main():
     for p in plan_reg: print(f"  registry {'clone' if p['pin'] else 'SKIP(no-pin!)'} {p['name']}  {p['url']}@{p['pin']}")
     for s in skipped:  print(f"  skip     {s}  (runtime 不匹配)")
     for u in undeclared: print(f"  skip     {u}  (未声明 target_runtimes；要装请写 [all] 或含本 runtime)")
+    for n in reg_rejected: print(f"  REJECT   {n!r}  (非法 skill 名，疑似路径穿越——拒绝安装)")
 
     if dry:
         print(f"  → 计划 {len(plan_own)} own + {len(plan_reg)} registry（dry-run，未执行）")
@@ -149,6 +164,9 @@ def main():
             print(f"  [SKIP] {p['name']} 无 pin，拒绝 clone（裸追上游有风险；请加 pin，如 pin: v1.2.0，或 pin: main + trusted_floating: true）")
             failed.append(p["name"]); continue
         dest = os.path.join(a.target, p["name"])
+        if not (safe_name(p["name"]) and within_target(a.target, dest)):   # 兜底：dest 必须在 target 内
+            print(f"  [REJECT] {p['name']!r} 安装目录越出 target，拒绝（路径穿越防护）")
+            failed.append(p["name"]); continue
         try:
             if os.path.isdir(dest): shutil.rmtree(dest)
             subprocess.run(["git", "clone", "--depth", "1", p["url"], dest],
