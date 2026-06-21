@@ -142,14 +142,16 @@ def main(root):
         if inbound[m] == 0:
             err(f"孤儿  {rel(root,m)}（无任何入链 wikilink）")
 
-    # 2b) 互链 ≥2（宪法硬规则：每页至少链到 2 个相关页；剥 code、排除自链；豁免结构页与 skills/）
+    # 2b) 互链 ≥2（宪法【建议】：每页宜链到 2 个相关页；剥 code、排除自链；豁免结构页与 skills/）
+    #     注：这是【提醒不报错】（WARN，不影响退出码）——保持知识图连通是好习惯，但不强制、不拦路。
+    #     删页/加页时不应因此被卡（见 substrate-curator 的 rm：删页会自动清反向链接）。
     for m in mds:
         if is_structural(root, m) or under(root, m, "skills"): continue
         self_stem = os.path.splitext(os.path.basename(m))[0]
         outs = {re.sub(r"\.md$", "", os.path.basename(t)) for t in wikilink_targets(texts[m])}
         outs.discard(self_stem)
         if len(outs) < 2:
-            err(f"互链不足  {rel(root,m)} 只链到 {len(outs)} 个页（宪法要求每页 ≥2 个 [[wikilink]]）")
+            warn(f"互链不足  {rel(root,m)} 只链到 {len(outs)} 个页（建议每页 ≥2 个 [[wikilink]]，仅提醒不报错）")
 
     # 3) frontmatter 合规（内容页）
     for m in mds:
