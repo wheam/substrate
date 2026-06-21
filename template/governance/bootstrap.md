@@ -33,6 +33,8 @@
 
 > 这套自检让任何 agent（任何 runtime）**自己**就能发现「我的 skill 旧了 / 版本落后了 / 库坏了」并对齐，不依赖用户手动提醒。
 > **想做成全自动**：把上面 1–4 接进本 runtime 的 session 启动钩子（如 Claude Code 的 SessionStart hook、Hermes 的启动 hook）。引擎提供检测与例程，钩子由各 runtime 一次性接。
+>
+> **自愈的前提（部署门槛）**：本 runtime **实际跑命令的身份**（用户/进程）必须能 ① 写 clone 仓库（`git pull`）② 写 skill 目标目录（`sync --apply` 覆盖）③ 读到 git 凭据（私有库认证）。若 agent 以非特权用户运行而仓库/凭据/skill 目录归他人所有，它就够不着、无法自愈——给该身份赋好归属即可。出网无 SSH 时用 **HTTPS + token** 而非 deploy key。
 
 ## 版本与迁移
 
