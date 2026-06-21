@@ -36,6 +36,8 @@ SENSITIVE_CONTENT = [
     re.compile(r"\bgithub_pat_[0-9A-Za-z_]{20,}"),       # GitHub fine-grained PAT
     re.compile(r"\bAIza[0-9A-Za-z_\-]{30,}"),            # Google API key
     re.compile(r"\bsk_live_[0-9A-Za-z]{16,}"),           # Stripe live key
+    re.compile(r"\bsk-(?:proj|ant|svcacct|live|test)?[-_]?[A-Za-z0-9]{16,}"),  # OpenAI(sk-proj-/sk-)/Anthropic(sk-ant-) 等裸 token
+    re.compile(r"(?i)\b(?:api[_-]?key|secret|token|password|passwd|credential)s?\b[\s:=\"']{1,4}[A-Za-z0-9_\-./+]{16,}"),  # 标签词后紧跟高熵串（正文裸密钥）
     re.compile(r"\beyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}"),  # JWT
 ]
 
