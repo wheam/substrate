@@ -212,6 +212,15 @@ printf '%s' "$OUT2" | grep -q "从 adapter 推断为" && ok "确实从 vendored 
 printf '%s' "$OUT2" | grep -q "install substrate-doctor" && ok "列出 own skill 安装计划" || bad "未列出 own skill 安装计划"
 expect_rc 0 "vendor adapters 后实例 doctor 仍 0 error" python3 "$DOC" "$INST2"
 
+echo "== 21) minor: doctor 剥缩进式代码块 → 缩进代码里示例 [[..]] 不误报，但真断链仍抓 =="
+T8="$(mktemp -d)/i"; mkdir -p "$T8"; cp -R "$ENGINE/examples/minimal/." "$T8/"
+# 前有空行 + 4 空格缩进的代码示例里放一个不存在的链接 → 不应被判断链
+printf '\n示例：\n\n    code with [[indented-example-missing]] here\n' >> "$T8/knowledge/git.md"
+python3 "$DOC" "$T8" 2>&1 | grep -q "indented-example-missing" && bad "缩进代码块内 wikilink 被误判断链" || ok "缩进代码块内 wikilink 不误报"
+# 防过度剥离：普通正文里的真断链必须仍被抓到（锁住「别把真链接吞掉」）
+printf '\n正文真断链 [[prose-really-missing]] 不在代码里。\n' >> "$T8/knowledge/markdown.md"
+python3 "$DOC" "$T8" 2>&1 | grep -q "prose-really-missing" && ok "正文真断链仍被抓（未漏报）" || bad "正文真断链被漏报（剥过头）"
+
 echo
 echo "==== 结果: $PASS passed, $FAIL failed ===="
 [ "$FAIL" = 0 ]
