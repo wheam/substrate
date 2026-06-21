@@ -1,6 +1,6 @@
 ---
 name: substrate-sync
-description: "把个人知识库里的 skill 按 runtime 选择性安装到本机 skill 目录，并对齐版本。当用户说「装 skill / 更新 skill / 同步 skill / 我 pull 之后对齐一下技能」，或一个 agent 拉取（git pull）库之后需要对齐自己已装的 skill 时使用。"
+description: "Selectively install the repo's skills into this runtime's skill dir and keep them version-aligned; `--check` reports whether installed skills are stale vs the repo. Use when the user says 'install/update skills / sync skills / align my skills', or when an agent has pulled the repo and needs to re-align its installed skills. 中文触发：「装 skill / 更新 skill / 同步 skill / pull 之后对齐技能」。"
 target_runtimes: [all]
 risk_level: high
 capabilities: [shell, network, install]

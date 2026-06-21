@@ -1,6 +1,6 @@
 ---
 name: substrate-bootstrap
-description: "新 agent / 新机器在一个 Substrate 个人知识库（个人仓库 / 共享状态仓库 / cortex）上首次上手：读宪法/zones、配本地身份、装 skill。当用户问「你有没有我的个人仓库 / 知识库」「这个库是什么 / 你了解我的库吗」「帮我接入 / 上手这个库」，或一个 agent 第一次面对这个仓库、不知道它是什么时使用。"
+description: "First-time onboarding of a new agent / machine onto a Substrate personal knowledge base (personal repo / shared state repo): read the constitution & zones, set local identity, install skills, self-check alignment. Use when the user asks 'do you have my personal repo / knowledge base', 'what is this repo / do you know my repo', 'get set up on this repo', or when an agent faces this repo for the first time. 中文触发：「你有没有我的个人仓库 / 知识库」「这个库是什么 / 你了解我的库吗」「帮我接入 / 上手这个库」。"
 target_runtimes: [all]
 risk_level: medium
 capabilities: [shell]

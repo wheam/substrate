@@ -1,6 +1,6 @@
 ---
 name: substrate-doctor
-description: "给个人知识库做防退化体检（断链 / 孤儿 / frontmatter / 索引漂移 / 收藏计数 / registry / 毕业阈值）。当用户说「体检 / 检查我的库 / 库有没有问题 / 跑一下 doctor / 库健康吗」时使用。只读，只报告不改。"
+description: "Anti-rot health check on the personal knowledge base (broken links / orphans / frontmatter / index drift / collection counts / registry / graduation thresholds). Read-only. Use when the user says 'health check / check my repo / is the repo OK / run doctor'. 中文触发：「体检 / 检查我的库 / 库有没有问题 / 跑一下 doctor / 库健康吗」。"
 target_runtimes: [all]
 risk_level: medium
 capabilities: [shell]

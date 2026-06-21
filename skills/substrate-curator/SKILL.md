@@ -1,6 +1,6 @@
 ---
 name: substrate-curator
-description: "维护个人知识库 / 个人仓库的知识页（互链 markdown 库，Karpathy LLM wiki 模式）——增删改查 + 自动交叉链接 + 同步目录索引 + 执行宪法 + git。当用户说「记一下 X / 存进知识库 / 更新库 / 这个值得记录 / 整理到库 / 查一下库里有没有 X / 我的笔记 / 我的个人仓库 / 我的知识库 / 我的 cortex」，或问及他的个人知识库/仓库时使用。取代旧的 personal-wiki。"
+description: "Maintain the owner's personal knowledge base / personal repo (interlinked markdown, Karpathy-LLM-wiki style): CRUD pages, auto cross-link, sync the directory index, enforce the constitution, git. Use when the user says 'note this / save to my knowledge base / update the repo / worth recording / file this / search my notes / my personal repo / my knowledge base / my substrate'. Replaces the old personal-wiki. 中文触发：「记一下 X / 存进知识库 / 更新库 / 这个值得记录 / 整理到库 / 查一下库里有没有 X / 我的笔记 / 我的个人仓库 / 我的知识库 / 我的 substrate」。"
 target_runtimes: [all]
 risk_level: medium
 capabilities: [shell]

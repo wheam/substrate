@@ -19,6 +19,20 @@
 - [ ] 适用 skill 已装进本 runtime。
 - [ ] 知道要写的 zone 的 canonical 在哪、写后要更新哪些索引。
 
+## ★ 每次开工前的对齐自检（agent 必做，不必等用户喊）
+
+仓库是多 agent、多机器共维的——你本地的副本/skill 随时可能落后。**每个 session 开始、或刚 `git pull` 之后**，按序自检（廉价、幂等）：
+
+1. **拉新**：`git pull`（基于最新状态再动手）。
+2. **对齐 skill**：跑 `substrate-sync --check`——它比对「本机装机时记录的实例 commit」vs「实例当前 commit」，并列出实例里有、本机没装的 skill。
+   - 报 ⚠ 不对齐（退出码 1）→ 跑 `substrate-sync --apply` 把 skill 更新/补齐到当前版本。
+3. **对齐版本/迁移**：跑 `substrate-migrate`（dry-run，不加 --apply）——若 `instance.version < engine.version` 它会列出 pending 迁移。
+   - 有 pending → 交 `substrate-migrate`（多机只在 `migration_leader` 上执行；它备份 tag、出计划、幂等应用、doctor 前后校验）。**别自己乱迁。**
+4. **体检**：跑 `substrate-doctor`——确认库健康（断链/孤儿/索引/计数），有 error 先修再写。
+
+> 这套自检让任何 agent（任何 runtime）**自己**就能发现「我的 skill 旧了 / 版本落后了 / 库坏了」并对齐，不依赖用户手动提醒。
+> **想做成全自动**：把上面 1–4 接进本 runtime 的 session 启动钩子（如 Claude Code 的 SessionStart hook、Hermes 的启动 hook）。引擎提供检测与例程，钩子由各 runtime 一次性接。
+
 ## 版本与迁移
 
 - 本实例基于的引擎版本记在 `governance/SUBSTRATE_VERSION`。
