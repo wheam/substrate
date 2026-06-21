@@ -1,24 +1,35 @@
 # Substrate
 
-**A git-native, agent-operable "shared state layer" for your personal AI agent fleet.** Knowledge, memory, skills, lists, rules, and an audit trail — in one versionable, migratable system that no platform can lock away. Multiple agents across multiple machines can safely co-maintain it.
+**One private place all your AI assistants share — so every one of them knows who you are and what you've saved.**
 
-> **个人 AI agent 舰队的「共享状态层」——git 原生、可被 agent 操作。** 知识、记忆、技能、清单、规则、审计，都在一个可版本化、可迁移、不被任何平台锁死的系统里；多个 agent、多台机器可以安全地共同维护它。
+> **一个你私有、所有 AI 助手共用的地方——让它们每一个都认识你、都知道你存过什么。**
 
-This repo is the **engine**: a neutral, open template + mechanism with **zero personal content**. You build your own *private* **instance** on top of it — your stuff lives in a separate repo that the engine never depends on.
+You probably use several AIs now — Claude on your laptop, a chatbot on your phone, maybe one on a server. Normally each is a stranger: you re-explain yourself every time, and whatever you tell one, the others never learn. Substrate gives them a **shared memory and knowledge base that you own**. Tell any of them *"remember this,"* *"save that restaurant,"* *"note this down"* — and it lands in one private folder that all of them can read and write. Under the hood it's just plain text files in a Git repo: yours forever, movable anywhere, locked into no app.
 
-> 这个仓库是**引擎**:中立、开源的模板 + 机制,**不含任何个人内容**。你在它之上搭自己的**私有实例**——你的内容放在另一个仓库里,引擎从不依赖它。
+> 你现在大概在用好几个 AI——电脑上的 Claude、手机上的聊天机器人、也许还有服务器上的。平时它们互不相识:你得对每个重新介绍自己,告诉这个的事那个永远不知道。Substrate 给它们一个**你自己拥有的共享记忆 + 知识库**。对任何一个说*「记住这个」*、*「收藏这家餐厅」*、*「记一下」*,它就落进同一个私有文件夹,所有 AI 都能读写。底层就是 Git 仓库里的纯文本文件:永远是你的、能搬到任何地方、不被任何 app 锁住。
+
+This repo is the reusable **template** (the "engine"). You don't put your data here — you use it to spin up your **own private copy**, where your notes actually live. The rest of this page shows you how.
+
+> 这个仓库是可复用的**模板**(也就是"引擎")。你的数据**不放在这里**——你用它生成一份**自己的私有副本**,笔记存在那份里。下面教你怎么搭。
 
 ---
 
-## What it is / isn't
+## What you can do with it
 
-It's the **engine + template + reference skills + adapters + migrations** to stand up your own "personal state repo that multiple agents co-maintain." It turns "how to maintain a repo many agents/machines write to over time" into reusable mechanism: governance, zones, admission control, skill distribution, shared memory, anti-rot health checks, safe upgrades.
+- **Tell it once, every AI knows.** "I'm vegetarian," "my job is X," "I prefer Y" — saved once, shared by all your assistants. Stop re-introducing yourself to each new chat.
+- **Save the things you'd otherwise lose.** Facts worth keeping, restaurants worth remembering, books to read, running to-dos — just say "save this" and your AI files it, and links it to related notes so you can find it again.
+- **It stays tidy on its own.** New notes get auto-linked to related ones; a built-in health check catches broken links and clutter so it doesn't rot into a mess.
+- **You own it, fully.** Everything is plain Markdown in your own private Git repo. Back it up, read it by hand, move it to another tool, share parts — no lock-in, no cloud you don't control.
 
-> 它是让你搭起「多 agent 共维的个人状态仓库」的**引擎 + 模板 + 参考 skill + adapter + 迁移**。它把"怎么维护一个被多 agent/多机器长期共写的仓库"沉淀成可复用机制:治理、分区、准入、skill 分发、记忆共享、防退化体检、安全升级。
+> ## 你能拿它干什么
+> - **说一次,所有 AI 都知道。** 「我吃素」「我做的是 X」「我偏好 Y」——存一次,所有助手共享。不用再对每个新对话重新自我介绍。
+> - **存下那些本来会丢的东西。** 想留的事实、值得记住的餐厅、想读的书、没做完的待办——说句「存一下」,AI 就帮你归档,还链到相关笔记,方便以后找回。
+> - **它自己保持整洁。** 新笔记自动链到相关的;内置体检会抓断链和杂乱,不让它烂成一团。
+> - **完全属于你。** 全是你私有 Git 仓库里的纯 Markdown。能备份、能手翻、能搬到别的工具、能选择性分享——不锁定、不依赖你管不到的云。
 
-It is **not** another Obsidian or RAG. The product is a **shared state layer** you fully own and can migrate — not a note-taking app.
+**It's not** another note-taking app, and not a single chatbot with memory bolted on. It's the layer *underneath*: the place your data lives and that any AI can plug into.
 
-> 它**不是**又一个 Obsidian 或 RAG。它卖的是你**完全拥有、可迁移**的**共享状态层**,不是笔记软件。
+> **它不是**又一个笔记 app,也不是某一个加了记忆的聊天机器人。它是底下那一层:你数据的归属地,任何 AI 都能接进来。
 
 ---
 
