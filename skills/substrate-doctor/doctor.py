@@ -260,6 +260,8 @@ def main(root):
         else:
             miss = [k for k in MANIFEST_REQUIRED if k not in keys]
             if miss: warn(f"skill manifest 缺字段  {rel(root,sk)}: {', '.join(miss)}")
+            if "description" not in keys:
+                warn(f"skill 缺 description  {rel(root,sk)}（agent 靠 description 匹配用户意图来触发；缺它可能识别不到这个 skill）")
 
     print(f"substrate-doctor: {os.path.basename(root)}  ({len(mds)} md 文件)")
     for tag, items in (("ERROR", errors), ("WARN", warnings), ("ADVICE", advice)):

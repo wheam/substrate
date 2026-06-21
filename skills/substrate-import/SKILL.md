@@ -1,5 +1,6 @@
 ---
 name: substrate-import
+description: "把已有的一堆 markdown / 笔记 / 文件夹 / Obsidian vault 批量搬进个人知识库。当用户说「把我这些笔记 / 这个文件夹 / 这个 vault 导进库 / 搬进知识库」时使用。"
 target_runtimes: [all]
 risk_level: medium
 capabilities: [shell]

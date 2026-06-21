@@ -1,5 +1,6 @@
 ---
 name: substrate-sync
+description: "把个人知识库里的 skill 按 runtime 选择性安装到本机 skill 目录，并对齐版本。当用户说「装 skill / 更新 skill / 同步 skill / 我 pull 之后对齐一下技能」，或一个 agent 拉取（git pull）库之后需要对齐自己已装的 skill 时使用。"
 target_runtimes: [all]
 risk_level: high
 capabilities: [shell, network, install]

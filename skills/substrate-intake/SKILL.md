@@ -1,5 +1,6 @@
 ---
 name: substrate-intake
+description: "判定一条新内容要不要进库、进哪个区、是否该拆成 skill（准入分类 + 自动回流守门）。当用户问「这个要不要存 / 存哪 / 这算知识还是 skill / 该不该进库」时使用。"
 target_runtimes: [all]
 risk_level: medium
 capabilities: [shell]

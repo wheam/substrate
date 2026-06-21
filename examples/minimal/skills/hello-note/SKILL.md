@@ -1,5 +1,6 @@
 ---
 name: hello-note
+description: "示例自写 skill——演示触发词写法。当用户说「hello note / 打个招呼笔记 / 示例 skill」时使用（教学占位，fork 后按你的真实 skill 改写）。"
 target_runtimes: [claude-code]
 risk_level: low
 capabilities: [read-markdown, write-markdown]

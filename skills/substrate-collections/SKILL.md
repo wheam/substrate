@@ -1,5 +1,6 @@
 ---
 name: substrate-collections
+description: "维护结构化收藏（餐厅 / 书 / 工具…，行式 CSV 为单一事实源 + 人读分片）。当用户说「收藏这个 / 存进我的餐厅清单 / 加到书单 / 我收藏的工具 / 查我收藏的 X / 我的清单」时使用。"
 target_runtimes: [all]
 risk_level: medium
 capabilities: [shell]
