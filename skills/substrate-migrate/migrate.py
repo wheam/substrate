@@ -256,6 +256,40 @@ def run_one(meta, instance, doctor_py, log):
     return True
 
 
+def fetch_remote_text(url, timeout=10):
+    """Best-effort 取一个小文本文件内容（http/https/file）。失败返回 None。仅标准库。"""
+    try:
+        import urllib.request
+        with urllib.request.urlopen(url, timeout=timeout) as r:
+            return r.read().decode("utf-8", "replace")
+    except Exception:
+        return None
+
+
+def remote_engine_note(instance, inst_v_t, log):
+    """Fix3（纯提醒，永不致命）：读 instance 的 governance/ENGINE_SOURCE_URL
+    （一行：指向远程引擎 ENGINE_VERSION 的 URL，可由 init-instance 写入），best-effort
+    取远程引擎版本——比实例新则提醒「去 migration_leader 升级」。无该文件/取不到/解析不了
+    一律静默或软提示。无引擎的 agent 也能借此知道引擎出新版了（但升级仍在 leader 上做）。"""
+    url_raw = read_text(os.path.join(instance, "governance", "ENGINE_SOURCE_URL"))
+    if not url_raw or not url_raw.strip():
+        return
+    url = url_raw.strip().splitlines()[0].strip()
+    if not url:
+        return
+    remote = fetch_remote_text(url)
+    if remote is None:
+        log(f"  远程引擎版本：未能联系 {url}（跳过提醒）")
+        return
+    rv_t = parse_version(remote)
+    if rv_t is None:
+        return
+    if inst_v_t is not None and rv_t > inst_v_t:
+        log(f"  ⚠ 引擎有新版 {remote.strip()}（你的实例更早）——到 migration_leader（有引擎的机器）上跑 substrate-migrate 升级，其它机器随后 pull 实例即可。")
+    else:
+        log(f"  引擎远程版本 {remote.strip()}：实例已跟上。")
+
+
 def main(argv):
     ap = argparse.ArgumentParser(add_help=True)
     ap.add_argument("--instance", required=True)
@@ -282,24 +316,40 @@ def main(argv):
         print(f"  迁移只能跑在用户实例上（实例的版本记在 governance/SUBSTRATE_VERSION）。")
         return 2
 
-    # 引擎根：默认本脚本所在仓库（skills/substrate-migrate/.. → 引擎根）
+    # 实例版本（先读：远程提醒 + 无引擎跳过都要用）
+    inst_ver = read_text(instance_version_path(instance))
+    if inst_ver is None:
+        print(f"substrate-migrate: 找不到实例 SUBSTRATE_VERSION: {instance_version_path(instance)}")
+        return 2
+    inst_v_t = parse_version(inst_ver)
+    if inst_v_t is None:
+        print(f"substrate-migrate: 实例版本号无法解析（instance={inst_ver!r}）")
+        return 2
+
+    # Fix3：可选的远程引擎版本提醒（纯提醒，永不致命）
+    remote_engine_note(instance, inst_v_t, log)
+
+    # 引擎根：显式 --engine，或默认本脚本所在仓库（skills/substrate-migrate/.. → 引擎根）
+    engine_explicit = a.engine is not None
     engine = os.path.abspath(a.engine) if a.engine else os.path.abspath(
         os.path.join(os.path.dirname(__file__), "..", "..")
     )
     eng_ver_path = os.path.join(engine, "ENGINE_VERSION")
     eng_ver = read_text(eng_ver_path)
     if eng_ver is None:
-        print(f"substrate-migrate: 找不到引擎 ENGINE_VERSION: {eng_ver_path}（用 --engine 指定引擎根）")
-        return 2
+        if engine_explicit:
+            # 用户显式 --engine 指到了没有 ENGINE_VERSION 的地方 → 真错误
+            print(f"substrate-migrate: 找不到引擎 ENGINE_VERSION: {eng_ver_path}（--engine 指错了？）")
+            return 2
+        # Fix1：本机没有引擎仓库（自包含实例）——这是常态，不是错误。
+        # 迁移脚本只在引擎里（不 vendor 进实例），所以跨版本升级只在有引擎的机器（migration_leader）上做；
+        # 其它机器随后 pull 已迁好的实例 + sync 重对齐即可。
+        log(f"substrate-migrate: 本机无引擎仓库（自包含实例）——跳过迁移检查（正常）。")
+        log(f"  实例 SUBSTRATE_VERSION={inst_ver.strip()}；跨版本升级在 migration_leader（有引擎）上跑。")
+        return 0
     eng_v_t = parse_version(eng_ver)
-
-    inst_ver = read_text(instance_version_path(instance))
-    if inst_ver is None:
-        print(f"substrate-migrate: 找不到实例 SUBSTRATE_VERSION: {instance_version_path(instance)}")
-        return 2
-    inst_v_t = parse_version(inst_ver)
-    if inst_v_t is None or eng_v_t is None:
-        print(f"substrate-migrate: 版本号无法解析（instance={inst_ver!r} engine={eng_ver!r}）")
+    if eng_v_t is None:
+        print(f"substrate-migrate: 引擎版本号无法解析（engine={eng_ver!r}）")
         return 2
 
     # doctor 路径

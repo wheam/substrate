@@ -305,6 +305,24 @@ CL2="$(mktemp -d)/c2"; git clone -q "$ORIGIN3" "$CL2"
 ( cd "$CL2" && printf '\n# remote tweak\n' >> skills/substrate-todo/SKILL.md && git -c user.name=t -c user.email=t@t add -A && git -c user.name=t -c user.email=t@t commit -q -m remotechange && git push -q origin main )
 expect_rc 1 "本地落后远程 → --check 报不对齐(rc=1)" env CLAUDE_SKILL_DIR="$SKD3" python3 "$T13/skills/substrate-sync/sync.py" --src "$T13/skills" --runtime claude-code --check
 
+echo "== 28) migrate: 无引擎干净跳过(Fix1) + 显式--engine指错仍报错 + 远程版本提醒(Fix3) =="
+T14="$(mktemp -d)/inst"
+sh "$ENGINE/init-instance.sh" "$T14" t14 >/dev/null 2>&1
+VMIG="$T14/skills/substrate-migrate/migrate.py"
+rm -f "$T14/governance/ENGINE_SOURCE_URL"   # 测试隔离：不打真网络
+# Fix1: 自包含实例(无引擎)+ 未传 --engine → 干净跳过 rc0（原来 rc2）
+expect_rc 0 "无引擎+未传--engine → 干净跳过(rc0)" python3 "$VMIG" --instance "$T14"
+# Fix1: 显式 --engine 指到无 ENGINE_VERSION 的目录 → 仍报错 rc2（区分"指错"与"本机无引擎"）
+EMPTY14="$(mktemp -d)"
+expect_rc 2 "显式--engine指错(无ENGINE_VERSION) → 报错(rc2)" python3 "$VMIG" --instance "$T14" --engine "$EMPTY14"
+# Fix3: 配 ENGINE_SOURCE_URL 指向更新版本 → 输出含远程版本号(提醒升级)
+printf '9.9.9\n' > "$(dirname "$T14")/remote_ver"
+printf 'file://%s/remote_ver\n' "$(dirname "$T14")" > "$T14/governance/ENGINE_SOURCE_URL"
+python3 "$VMIG" --instance "$T14" 2>&1 | grep -q "9.9.9" && ok "Fix3: 远程有新版 → 提醒(含版本号)" || bad "Fix3: 未提醒远程新版"
+# Fix3: URL 不可达 → 非致命(仍 rc0)
+printf 'file:///nonexistent/xyz\n' > "$T14/governance/ENGINE_SOURCE_URL"
+expect_rc 0 "Fix3: URL不可达 → 非致命(rc0)" python3 "$VMIG" --instance "$T14"
+
 echo
 echo "==== 结果: $PASS passed, $FAIL failed ===="
 [ "$FAIL" = 0 ]

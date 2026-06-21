@@ -34,12 +34,29 @@ vendor_adapters() {   # $1 = 实例根目录
   find "$dest_root/adapters" -name __pycache__ -type d -exec rm -rf {} + 2>/dev/null || true
 }
 
+write_engine_source_url() {   # $1 = 实例根；best-effort 由引擎 git origin 推出 raw ENGINE_VERSION URL，写进实例
+  # 让无引擎的机器也能 best-effort 看一眼引擎远程版本（substrate-migrate 的提醒用）。非 GitHub 远程则跳过，用户可手填。
+  command -v git >/dev/null 2>&1 || return 0
+  url="$(git -C "$ENGINE" remote get-url origin 2>/dev/null)" || return 0
+  [ -n "$url" ] || return 0
+  case "$url" in
+    https://github.com/*) slug="${url#https://github.com/}" ;;
+    git@github.com:*)     slug="${url#git@github.com:}" ;;
+    *) return 0 ;;
+  esac
+  slug="${slug%.git}"
+  branch="$(git -C "$ENGINE" rev-parse --abbrev-ref HEAD 2>/dev/null || echo main)"
+  [ -n "$branch" ] && [ "$branch" != "HEAD" ] || branch=main
+  printf 'https://raw.githubusercontent.com/%s/%s/ENGINE_VERSION\n' "$slug" "$branch" > "$1/governance/ENGINE_SOURCE_URL"
+}
+
 # ── 刷新模式（引擎升级后重新 vendor）──
 if [ "${1:-}" = "--refresh" ]; then
   DEST="${2:?用法: init-instance.sh --refresh <实例目录>}"
   [ -d "$DEST/skills" ] || { echo "不是实例目录（无 skills/）: $DEST" >&2; exit 2; }
   vendor_skills "$DEST/skills"
   vendor_adapters "$DEST"
+  write_engine_source_url "$DEST"
   echo "已把 vendored 维护 skill + adapters 刷新到引擎当前版本（ENGINE_VERSION=$(cat "$ENGINE/ENGINE_VERSION")）。"
   echo "下一步：重跑 sync 把更新装进 runtime，并跑 doctor 自检。"
   exit 0
@@ -54,6 +71,7 @@ mkdir -p "$DEST"
 cp -R "$ENGINE/template/." "$DEST/"
 vendor_skills "$DEST/skills"
 vendor_adapters "$DEST"
+write_engine_source_url "$DEST"
 
 # 填实例名占位（python3 替换，避免 sed 的 BSD/GNU 差异）
 python3 - "$DEST/README.md" "$NAME" <<'PY'
