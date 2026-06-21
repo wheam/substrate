@@ -11,8 +11,10 @@
 ## 三类 skill
 
 1. **自己写的**：`skills/<name>/`，纯文件，跟仓库走。
-2. **第三方**：只在 `_registry.md` 记 URL + pin，**代码不入库**；`substrate-sync` 安装时按 pin 从上游 clone。
+2. **第三方**：在 `_registry.md` 记指针，**代码不入库**。两种 `kind`：`git`（记 URL+pin，`substrate-sync` 按 pin 从上游 clone）｜`plugin`（插件机制分发的，如 superpowers，记 `source`，sync 不 clone、更新交回插件机制）。
 3. **agent 自总结的**：先自动回流到 `_incoming/`，**过 admission 守门（风险分级）才晋升**到 `skills/<name>/`。
+
+> **`substrate-*` 维护 skill**：本实例由 `init-instance.sh` 脚手架时已把引擎的 substrate-curator/doctor/sync/migrate/… **vendor 进本目录**，所以 clone 实例即带维护工具。它们是引擎的副本（单一事实源在引擎）；引擎升级后用 `init-instance.sh --refresh <实例>` 刷新。
 
 ## skill 文件夹长什么样
 

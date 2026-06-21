@@ -1,12 +1,21 @@
 # registry.schema.yaml — skills/_registry.md 里每个第三方 skill 条目的契约
-# 第三方 skill 代码不入库，只在这里记 URL；安装时由 substrate-sync 从上游 clone/pull。
+# 两种来源形态（kind）：
+#   - git    （默认）：代码不入库，记 upstream_git_url + pin；substrate-sync 按 pin 从上游 clone。
+#   - plugin ：由宿主的插件机制分发（如 Claude Code 的 plugin marketplace）。**没有可 clone 的裸 git 仓库**，
+#              所以只记 source（marketplace/插件名），sync 不 clone、不负责更新——更新交回插件机制。
+#              用于「我装了某插件 skill，想在 registry 里登记它（清单/可复现），但它不是 git-clone 形态」。
 type: object
-required: [name, upstream_git_url, pin, target_runtimes]
+required: [name, kind, target_runtimes]
 properties:
   name:             { type: string }
-  upstream_git_url: { type: string }
-  pin:              { type: string, description: "tag/commit/branch，**必填**（substrate-sync 缺 pin 拒绝安装）。要追移动 ref（如 main）就把 pin 设成该 ref 名并同时把 trusted_floating 设 true。" }
-  trusted_floating: { type: boolean, default: false, description: "声明 pin 是会移动的 ref（main/分支）。doctor 对「pin=main/master/HEAD 却未声明 trusted_floating: true」发 WARN（供应链提示）。不会让你省略 pin。" }
-  target_runtimes:  { type: array, items: { type: string }, description: "取值由实例的 adapter 定义，引擎不钉死具体产品名" }
+  kind:             { enum: [git, plugin], default: git, description: "git=clone URL@pin；plugin=插件机制管理，sync 不 clone" }
+  # ── kind: git 必填 ──
+  upstream_git_url: { type: string, description: "kind=git 必填" }
+  pin:              { type: string, description: "kind=git 必填（substrate-sync 缺 pin 拒绝安装）。追移动 ref（如 main）就把 pin 设成该 ref 名并把 trusted_floating 设 true。kind=plugin 不需要。" }
+  trusted_floating: { type: boolean, default: false, description: "声明 pin 是会移动的 ref（main/分支）。doctor 对「pin=main/master/HEAD 却未声明 trusted_floating: true」发 WARN。仅 kind=git 适用。" }
+  # ── kind: plugin 必填 ──
+  source:           { type: string, description: "kind=plugin 必填：插件来源（如 'claude-plugins-official/superpowers'）。sync 不 clone，只登记并提示用插件机制安装/更新。" }
+  # ── 通用 ──
+  target_runtimes:  { type: array, items: { type: string }, description: "取值由实例的 adapter 定义，引擎不钉死具体产品名。特殊值 'all' 通配。" }
   install_paths:    { type: object, description: "各 runtime 的安装路径，可由 adapter 推断" }
   notes:            { type: string }

@@ -194,6 +194,13 @@ def main(root):
         block = "\n".join(l for l in (m.group(1) if m else "").splitlines() if not l.lstrip().startswith("#"))
         for chunk in re.split(r"(?m)^\s*-\s+name:", block)[1:]:
             name = chunk.splitlines()[0].strip()
+            kindm = re.search(r"(?m)^\s*kind:\s*(\S+)", chunk)
+            kind = (kindm.group(1).strip("'\"") if kindm else "git")
+            if kind == "plugin":
+                # 插件机制管理：不 clone、无 pin。只要求登记了 source。
+                if not re.search(r"(?m)^\s*source:\s*\S", chunk):
+                    err(f"registry kind=plugin 缺 source（无法标识插件来源）: {rel(root,reg)} 条目 {name}")
+                continue
             if "upstream_git_url" not in chunk:
                 continue
             pinm = re.search(r"(?m)^\s*pin:\s*(\S+)", chunk)
