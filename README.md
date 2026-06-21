@@ -1,185 +1,167 @@
 # Substrate
 
-> **个人 AI agent 舰队的「共享状态层」引擎**——一个 git 原生、可被 agent 操作、可审计、可自描述、可安全升级的模板与机制。
-> 状态：**P0–P5 全部落地**，`sh tests/run-tests.sh` 70 个零依赖回归测试全绿；积极维护中。这是从设计（`docs/BUILD-PLAN.md`）抽象出的**开源引擎**，本身**不含任何个人内容**——引擎对所有用户中立。
+**A git-native, agent-operable "shared state layer" for your personal AI agent fleet.** Knowledge, memory, skills, lists, rules, and an audit trail — in one versionable, migratable system that no platform can lock away. Multiple agents across multiple machines can safely co-maintain it.
+
+> **个人 AI agent 舰队的「共享状态层」——git 原生、可被 agent 操作。** 知识、记忆、技能、清单、规则、审计，都在一个可版本化、可迁移、不被任何平台锁死的系统里；多个 agent、多台机器可以安全地共同维护它。
+
+This repo is the **engine**: a neutral, open template + mechanism with **zero personal content**. You build your own *private* **instance** on top of it — your stuff lives in a separate repo that the engine never depends on.
+
+> 这个仓库是**引擎**:中立、开源的模板 + 机制,**不含任何个人内容**。你在它之上搭自己的**私有实例**——你的内容放在另一个仓库里,引擎从不依赖它。
 
 ---
 
-## 这是什么 / 不是什么
+## What it is / isn't
 
-**是**：让任何人都能搭起自己那套「多 agent 共维的个人状态仓库」的**引擎 + 模板 + 参考 skill + adapter + 迁移**。
-它把"怎么维护一个被多个 agent / 多台机器长期共写的仓库"沉淀成可复用机制：治理层、分区注册、准入审查、skill 分发、记忆共享、防退化体检、安全升级。
+It's the **engine + template + reference skills + adapters + migrations** to stand up your own "personal state repo that multiple agents co-maintain." It turns "how to maintain a repo many agents/machines write to over time" into reusable mechanism: governance, zones, admission control, skill distribution, shared memory, anti-rot health checks, safe upgrades.
 
-**不是**：又一个 Obsidian、又一个 RAG。它卖的是 **shared state layer**——知识、记忆、技能、清单、规则、审计，都在一个**可版本化、可迁移、可被 agent 操作**的系统里，不被锁进任何平台。
+> 它是让你搭起「多 agent 共维的个人状态仓库」的**引擎 + 模板 + 参考 skill + adapter + 迁移**。它把"怎么维护一个被多 agent/多机器长期共写的仓库"沉淀成可复用机制:治理、分区、准入、skill 分发、记忆共享、防退化体检、安全升级。
 
-> 目标用户：有多个 agent/runtime、频繁让 agent 代办、要跨设备一致状态、关心数据可迁移的人。
+It is **not** another Obsidian or RAG. The product is a **shared state layer** you fully own and can migrate — not a note-taking app.
+
+> 它**不是**又一个 Obsidian 或 RAG。它卖的是你**完全拥有、可迁移**的**共享状态层**,不是笔记软件。
 
 ---
 
-## 快速上手（起手 4 步）
+## Quick start
 
-你需要两个 git 仓库：**引擎**（这个仓库，公开，只含机制）+ **你的实例**（私有，放你的知识/记忆/技能/清单）。下面 4 步从零搭起你自己的个人知识库。
+You'll end up with two git repos: the **engine** (this one, public, mechanism only) and your **instance** (private, holds your knowledge / memory / skills / lists).
 
-**前置**：`git`、`python3`（**标准库即可，无需 pip 装任何包**）、一个能读 skill 的 agent runtime（Claude Code、Codex、Hermes…）。
+> 你会有两个 git 仓库:**引擎**(这个,公开,只含机制)+ **你的实例**(私有,放你的知识/记忆/技能/清单)。
+
+### Option A — let your agent set it up (recommended)
+
+Hand the engine URL + the prompt below to any agent that can run shell commands (Claude Code, Codex, Hermes, …). It does the whole setup for you.
+
+> ### 方式 A —— 让你的 agent 帮你搭(推荐)
+> 把引擎地址 + 下面这段 prompt 丢给任何能跑 shell 的 agent(Claude Code、Codex、Hermes…),它会替你把整套搭好。
+
+```text
+I want to set up a personal knowledge base using the Substrate engine:
+https://github.com/wheam/substrate
+
+Please do it for me:
+1. Clone the engine to a temp dir and read its README.
+2. Ask me for: where to put my instance, a short instance name, my GitHub username.
+3. Scaffold my private instance: run ./init-instance.sh <dir> <name>, then
+   `git init && git add -A && git commit -m "init"` inside it.
+4. Install the maintenance skills into YOUR runtime:
+   python3 <instance>/skills/substrate-sync/sync.py --src <instance>/skills --runtime <your-runtime> --apply
+5. Run substrate-doctor on the instance and confirm 0 errors.
+6. Tell me how to push the instance to a PRIVATE GitHub repo, and give me a few
+   example phrases to start using it.
+
+Never put any of my personal content into the public engine repo.
+```
+
+### Option B — manual (4 steps)
+
+> ### 方式 B —— 手动 4 步
+
+**Prereqs / 前置**: `git`, `python3` (standard library only — **no pip installs**), and an agent runtime that can read skills.
 
 ```sh
-# 1) 拿引擎（或在 GitHub 上 Fork 到你账号）
-git clone https://github.com/<you>/substrate.git && cd substrate
+# 1) Get the engine (or fork it to your account first)
+git clone https://github.com/wheam/substrate.git && cd substrate
 
-# 2) 脚手架你自己的私有实例（自包含：自带 template 骨架 + vendored 维护 skill + adapters）
+# 2) Scaffold your private instance (self-contained: template + vendored skills + adapters)
 ./init-instance.sh ~/my-cortex my-instance
 cd ~/my-cortex && git init && git add -A && git commit -m "init my substrate instance"
-#   然后在 GitHub 建一个【私有】仓库，把它 push 上去（你的个人内容不应公开）
+#   Then create a PRIVATE GitHub repo and push it (your content stays private)
 
-# 3) 把维护 skill 装进你的 agent runtime（按 runtime 选择性安装）
+# 3) Install the maintenance skills into your runtime
 python3 ~/my-cortex/skills/substrate-sync/sync.py \
         --src ~/my-cortex/skills --runtime claude-code --apply
-#   换 runtime 就改 --runtime codex / hermes …（支持的见 adapters/）
+#   Swap --runtime for codex / hermes / … (see adapters/)
 
-# 4) 让 agent 上手：对它说「帮我接入这个个人仓库 / 这个库是什么」
-#    → 触发 substrate-bootstrap：读宪法+分区、配本地身份、自检对齐，然后就能替你维护了
+# 4) Onboard your agent: tell it "get set up on my personal repo"
+#    → triggers substrate-bootstrap (reads the constitution + zones, sets identity, self-checks)
 ```
 
-做完这 4 步，你就有了一个**多 agent 共维、git 原生、可迁移**的个人状态层。换机器/换 agent，只要 `git clone 你的实例` + 重跑第 3 步装 skill，即同一套能力。
+That's it — you now have a multi-agent, git-native, migratable personal state layer. On a new machine or agent, just `git clone` your instance and re-run step 3.
 
-## 日常怎么用（和 agent 对话）
+> 完工——你就有了一个多 agent 共维、git 原生、可迁移的个人状态层。换机器/换 agent,只要 `git clone` 你的实例 + 重跑第 3 步即可。
 
-装好后用自然语言让 agent 代你维护——它会触发对应 skill：
+---
 
-| 你说 | 触发的 skill |
+## Daily use — talk to your agent
+
+Once installed, use plain language; your agent triggers the right skill.
+
+> ## 日常使用 —— 和你的 agent 对话
+> 装好后用自然语言,agent 会触发对应 skill。
+
+| You say / 你说 | Skill |
 |---|---|
-| 「记一下 X / 存进知识库 / 这个值得记录」 | `substrate-curator`（增删改知识页 + 自动互链 + 同步目录索引） |
-| 「收藏这家餐厅 / 加到书单」 | `substrate-collections`（结构化收藏：CSV 为源 + 人读分片） |
-| 「记住我…/ 我的偏好是…」 | `substrate-memory`（跨 agent 共享的「关于主人」记忆） |
-| 「加个待办 / 我的 todo」 | `substrate-todo` |
-| 「这个要不要存 / 存哪 / 算知识还是 skill」 | `substrate-intake`（准入分类） |
-| 「把这些笔记导进库」 | `substrate-import`（批量导入 markdown/vault） |
-| 「体检一下库 / 库有没有问题」 | `substrate-doctor`（断链/孤儿/索引漂移/计数，只读） |
-| 「装/更新 skill / pull 后对齐」 | `substrate-sync` |
+| "note this / save to my knowledge base" · 「记一下 / 存进知识库」 | `substrate-curator` |
+| "save this restaurant / add to my book list" · 「收藏这家餐厅 / 加到书单」 | `substrate-collections` |
+| "remember that I… / my preference is…" · 「记住我… / 我的偏好是…」 | `substrate-memory` |
+| "add a todo / what's left" · 「加个待办 / 还有啥没做」 | `substrate-todo` |
+| "should I save this / where does it go" · 「这个要不要存 / 存哪」 | `substrate-intake` |
+| "import these notes / this vault" · 「把这些笔记导进库」 | `substrate-import` |
+| "health-check my repo" · 「体检一下库」 | `substrate-doctor` |
+| "install / align skills" · 「装 / 对齐 skill」 | `substrate-sync` |
 
-> **多机/多 agent 保持一致**：每次开工让 agent 跑「自检例程」（`git pull` → `sync --check` → 落后则 `--apply` → `doctor`）。`sync --check` 会顺带 `git fetch` 比对远程，**本地落后也能发现**，不会误判已最新。想全自动，就给你的 runtime 接一个**会话启动钩子**跑这套（见 `template/governance/bootstrap.md`）。
+---
 
-## 怎么升级（引擎出新版，不丢数据）
+## Keeping machines in sync
 
-引擎发新版后，在**你的实例**里：
+The repo is co-maintained, so each machine's copy can fall behind. At the start of a session, have your agent run the self-check: `git pull` → `substrate-sync --check` → if behind, `--apply` → `substrate-doctor`. `--check` does a best-effort `git fetch` and flags when you're behind the remote, so a silently-failed pull can't masquerade as "up to date."
+
+> ## 多机/多 agent 保持一致
+> 仓库是共维的,每台机器的副本都可能落后。每次开工让 agent 跑自检:`git pull` → `substrate-sync --check` → 落后则 `--apply` → `substrate-doctor`。`--check` 会顺带 `git fetch` 比对远程、**本地落后也能发现**,所以静默失败的 pull 不会冒充"已最新"。
+
+To fully automate it, wire your runtime's own session-start hook to run that routine (see `template/governance/bootstrap.md`).
+
+> 想全自动,就给你的 runtime 接一个原生的会话启动钩子跑这套(见 `template/governance/bootstrap.md`)。
+
+---
+
+## Upgrading (no data loss)
+
+When the engine ships a new version, in **your instance**: refresh the vendored skills, then let your agent run the migration.
+
+> ## 升级(不丢数据)
+> 引擎发新版后,在**你的实例**里:先刷新 vendored 的维护 skill,再让 agent 跑迁移。
 
 ```sh
-# 1) 刷新实例里 vendored 的维护 skill 到新引擎
-/path/to/substrate/init-instance.sh --refresh ~/my-cortex
-# 2) 让 agent 跑迁移：对它说「升级库 / 迁移到新版本」→ 触发 substrate-migrate
-#    （有序/幂等/可验证/可回滚；先打 git tag 快照、doctor 前后校验；多机只在 migration_leader 上跑）
+/path/to/substrate/init-instance.sh --refresh ~/my-cortex   # refresh vendored skills
+#   then: tell your agent "upgrade my repo" → triggers substrate-migrate
 ```
 
-迁移当**数据库迁移**做，任何一步都不丢数据（详见 `docs/BUILD-PLAN.md` §9）。
+Migrations run like database migrations — ordered, idempotent, verifiable, reversible — and **never lose data** (git-tag snapshot + before/after doctor checks; multi-machine runs only on the device flagged `migration_leader`).
+
+> 迁移当**数据库迁移**做:有序/幂等/可验证/可回滚,**绝不丢数据**(git tag 快照 + doctor 前后校验;多机只在标了 `migration_leader` 的机器上跑)。
 
 ---
 
-## 核心抽象：Engine / Instance 分离
+## The core idea: Engine / Instance separation
 
-这是本项目的灵魂，也是它能开源的前提：
+This split is what lets the engine be open while your content stays private.
 
-| | Engine（本仓库，可复用、可开源） | Instance（用户私有的个人状态仓库） |
+> ## 核心:Engine / Instance 分离
+> 正是这个拆分,让引擎可以开源、而你的内容保持私有。
+
+| | Engine (this repo, public) | Instance (your private repo) |
 |---|---|---|
-| 内容 | 机制、模板、schema、参考 skill、adapter、**迁移** | 知识页、收藏、记忆、TODO、projects、fleet、私有 skill |
-| 可见性 | 公开 | 私有（你自己的仓库） |
-| 约束 | **不得依赖任何用户的偶然事实**（目录命名以外） | 在 engine 之上叠自己的内容 |
+| Holds / 内容 | mechanism, template, schemas, reference skills, adapters, migrations | knowledge, collections, memory, todos, projects, fleet, private skills |
+| Constraint / 约束 | must not depend on any user's incidental facts | your stuff, layered on top of the engine |
 
-引擎决定"怎么维护"，instance 决定"维护什么"。引擎与实例是**两个独立的 git 仓库**。
+The engine decides *how* to maintain; your instance decides *what* to maintain. They are two independent git repos.
 
----
-
-## 三层模型（control / data / execution plane）
-
-- **Control plane** — `template/governance/`：宪法、分区注册、准入、上手协议、版本。
-- **Data plane** — `template/{knowledge,collections,memory,projects,...}`：用户长期个人 context。
-- **Execution plane** — `template/skills/` + 本地清单：能做事的东西 + 本地状态（不入库）。
-
-> 概念分层，instance 落地时不必照搬目录名。术语见 `docs/concepts.md`。
+> 引擎决定"怎么维护",实例决定"维护什么"。两者是两个独立的 git 仓库。
 
 ---
 
-## 目录结构
+## Learn more / Contributing
 
-```
-substrate/
-├── README.md  LICENSE  CONTRIBUTING.md
-├── ENGINE_VERSION       # 引擎版本（迁移区间计算的源头；实例侧记 governance/SUBSTRATE_VERSION）
-│
-├── docs/                # 引擎文档（给人读）
-│   ├── BUILD-PLAN.md    #   完整设计 + 开发路线 P0–P5（开发依据）
-│   ├── architecture.md  #   设计原理：三层模型 + 防退化 + 准入 + 规模化
-│   └── concepts.md      #   术语单一源：zone / governance / admission / Agent Packet / migration …
-│
-├── template/            # ★ init 时脚手架进用户仓库的「instance 骨架」
-│   ├── README.md            # instance 入口：顶部「agent 必读」横幅 + zone 级索引
-│   ├── .gitignore           # 默认忽略：本地清单/缓存/generated/嵌套外部 repo
-│   ├── governance/          # control plane
-│   │   ├── CONSTITUTION.md   #   少而硬的全局不变量 + 「新增类型」procedure
-│   │   ├── zones.md         #   分区注册表（顶部可解析 YAML 块 + 人话）
-│   │   ├── admission.md     #   入库四问 / 四去向 / skill 风险分级
-│   │   ├── bootstrap.md     #   新 agent 上手协议
-│   │   ├── architecture.md  #   本实例的设计逻辑（用户填）
-│   │   └── SUBSTRATE_VERSION #  本实例基于的引擎版本（迁移用）
-│   ├── fleet/README.md      # 设备清单 + 角色（实例数据）
-│   ├── skills/              # execution plane：README + _registry + _incoming/
-│   ├── memory/about-owner/  # 跨 agent 共享的「关于主人」记忆（通用槽位）
-│   ├── collections/         # 通用收藏（行式 canonical + 索引）
-│   ├── projects/            # 个人非代码项目
-│   ├── knowledge/           # 知识页（分类用户自定）
-│   └── raw/                 # 原始素材（只读）
-│
-├── schemas/             # ★ 机器可解析「契约」（doctor / sync / migrate 解析它们，不猜 markdown）
-│   ├── zone.schema.yaml          # zone 注册项字段（含 graduation）
-│   ├── skill-manifest.schema.yaml#  skill 元信息（risk_level / capabilities / target_runtimes）
-│   ├── registry.schema.yaml      # 第三方 skill registry 条目
-│   └── migration.schema.yaml     # 版本迁移：有序/幂等/可验证/可回滚
-│
-├── skills/              # ★ 引擎参考 skill 套件（substrate-*，见 skills/README.md；P1+ 逐个实现）
-├── adapters/            # ★ 可插拔 runtime 适配器（声明式：装哪/怎么探测/清单存哪）
-├── migrations/          # ★ 版本迁移（P3）
-└── examples/minimal/    # 最小可跑示例 instance（中立假数据）
-```
+- **Concepts & design**: `docs/concepts.md`, `docs/architecture.md`
+- **Full design + roadmap**: `docs/BUILD-PLAN.md`
+- **Hacking on the engine itself**: `CONTRIBUTING.md` (red lines, contract-first, skills-first, self-checks)
+- **Run the tests**: `sh tests/run-tests.sh` (zero-dependency)
 
----
+> ## 了解更多 / 参与开发
+> 概念与设计见 `docs/`;想给引擎本身写代码看 `CONTRIBUTING.md`;测试 `sh tests/run-tests.sh`(零依赖)。
 
-## 操作 = skill（skills-first）
+## License
 
-**Substrate 是 agent-native 的**：所有操作的第一公民是参考 skill（agent 读 skill 即执行），**不依赖编译型 CLI / Node / Python 运行时**。
-
-| 操作 | 负责的 skill |
-|---|---|
-| 脚手架新实例 | `substrate-bootstrap`（+ `template/` 拷贝） |
-| 防退化体检（断链/孤儿/索引漂移/registry/毕业阈值） | `substrate-doctor` |
-| 按角色选择性装 skill | `substrate-sync` |
-| 内容分类 + 审查 `_incoming/` 回流件 | `substrate-intake` |
-| 批量导入已有内容 | `substrate-import` |
-| 跨引擎版本安全迁移 | `substrate-migrate` |
-
-> doctor / migrate 的**确定性**靠 skill **内嵌零安装 shell**（grep/sort/comm + python3 标准库），不靠二进制。CI / 无 agent 场景**直接跑脚本**（`doctor.py` / `sync.py`）即可——**没有** `substrate` CLI 这层壳。
-
----
-
-## 升级不丢数据（迁移是一等公民）
-
-引擎会演进（治理约定、schema、zone 布局变化）。一个基于引擎 vX 的实例升到 vY，**当数据库迁移做**：有序、命名、幂等、可验证、可回滚（契约见 `schemas/migration.schema.yaml`）。任何迁移不丢数据——git tag 快照 + doctor 前后校验不变量 + 模糊内容进隔离区。详见 `docs/BUILD-PLAN.md` §9。
-
----
-
-## 起源
-
-本引擎按 `docs/BUILD-PLAN.md` 的设计落地。设计者自己有一个朴素的私有知识库作为需求来源与**测试素材**（不随本仓库公开，也不被引擎依赖）。**抽象顺序**：先把 engine / instance / local / generated / forbidden 边界划干净，再做 template + 参考 skill + adapter + 迁移；skill 市场 / 托管同步 / Web UI 等**现在不做**。
-
----
-
-## 状态
-
-- [x] 目录骨架 + 结构设计
-- [x] **P0**：4 个 schema 定稿（+ `zone.schema` graduation）；`docs/concepts.md` 术语表；`template/` 填实（governance 五件套 + 各 zone README 含 Agent Packet + skills README/_registry + fleet）；`examples/minimal` 立起；`ENGINE_VERSION`
-- [x] **P1**：核心闭环 `substrate-curator/sync/doctor/bootstrap`，跑通 clone→bootstrap→装 skill→读写→doctor 通过
-- [x] **P2**：准入与导入（`substrate-intake` / `substrate-import` + generic-md/obsidian 来源适配器）
-- [x] **P3**：迁移机制（`migrations/` + `substrate-migrate`，含回滚 + 多机幂等 + 引擎自我保护）
-- [x] **P4**：适配器（generic-filesystem + claude-code 做实，codex/hermes/obsidian 声明）
-- [x] **P5**：收尾 skill（collections / memory / todo）
-- [x] LICENSE（MIT）+ 公开 README（快速上手 / 日常用 / 升级）
-
-> 开发依据见 `docs/BUILD-PLAN.md`（P0–P5 完整路线）。
+MIT — see `LICENSE`.
