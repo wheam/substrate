@@ -132,10 +132,37 @@ def skills_tree(src):
         return None
 
 
+def remote_status(src, timeout=20):
+    """Best-effort 远程比对：实例仓库本地 HEAD 是否落后其上游。返回 (kind, behind)：
+      ('no-upstream', 0)  没配上游（纯本地库）——跳过，不提示。
+      ('unreachable', 0)  有上游但联系不上远程——提示无法确认，但不报错。
+      ('ok', n)           能比对，本地落后远程 n 个 commit。
+    意义：即便 git pull 静默失败（权限/网络），--check 自己 fetch 后仍能发现"我落后了"，
+    不再拿没更新的工作树误报"已对齐"。无 git/无上游/超时/异常一律非致命。"""
+    inst = os.path.dirname(os.path.abspath(src))
+    try:
+        u = subprocess.run(["git", "-C", inst, "rev-parse", "--abbrev-ref", "@{u}"],
+                           capture_output=True, text=True)
+        if u.returncode != 0:
+            return ("no-upstream", 0)
+        f = subprocess.run(["git", "-C", inst, "fetch", "-q"],
+                           capture_output=True, text=True, timeout=timeout)
+        if f.returncode != 0:
+            return ("unreachable", 0)
+        r = subprocess.run(["git", "-C", inst, "rev-list", "--count", "HEAD..@{u}"],
+                           capture_output=True, text=True)
+        if r.returncode != 0:
+            return ("unreachable", 0)
+        return ("ok", int(r.stdout.strip() or "0"))
+    except Exception:
+        return ("unreachable", 0)
+
+
 def do_check(a):
     """检测本机已装 skill 是否与实例对齐：比对清单记录的 instance_commit vs 实例当前 HEAD，
     并列出实例 skills/ 里选中本 runtime、但本机未安装的 skill。
-    退出码: 0=已对齐; 1=有漂移（该跑 sync --apply）; 2=没装过/清单缺失或损坏。"""
+    还会 best-effort fetch 比对本地 vs 远程上游——落后远程也算不对齐（堵"pull 没成功却报对齐"）。
+    退出码: 0=已对齐; 1=有漂移（该 git pull / sync --apply）; 2=没装过/清单缺失或损坏。"""
     mpath = a.manifest or os.path.join(a.target, "installed-skills.json")
     if not os.path.isfile(mpath):
         print(f"substrate-sync --check: 没找到安装清单 {mpath}——本 runtime 还没装过，请先 --apply。")
@@ -154,10 +181,18 @@ def do_check(a):
             src_names.add(entry)
     missing = sorted(src_names - installed_names)
 
+    rkind, behind = remote_status(a.src)
+
     print(f"substrate-sync --check  runtime={a.runtime}")
     print(f"  装机时实例 commit: {man.get('instance_commit') or '(未记录)'}")
     print(f"  skills/ 子树: 装机 {(rec_tree or '(未记录)')[:10]}  当前 {(cur_tree or '(非 git)')[:10]}")
+    if rkind == "ok":
+        print(f"  远程: 本地{'落后 origin %d 个 commit' % behind if behind else '与 origin 一致'}")
+    elif rkind == "unreachable":
+        print("  远程: 未能联系远程，无法确认是否落后（仅本地比对）")
     drift = []
+    if rkind == "ok" and behind > 0:
+        drift.append(f"本地仓库落后远程 {behind} 个 commit（git pull 可能没成功/没跑）——先 git pull 再对齐")
     if cur_tree and rec_tree and cur_tree != rec_tree:
         drift.append("skills/ 自上次同步后有变化（skill 更新/版本升级）——本机 skill 可能过时")
     if cur_tree and not rec_tree:
@@ -167,7 +202,7 @@ def do_check(a):
     if drift:
         for d in drift:
             print(f"  ⚠ {d}")
-        print(f"  → 不对齐：跑  python3 {os.path.basename(__file__)} --src {a.src} --runtime {a.runtime} --apply  对齐。")
+        print(f"  → 不对齐：先 git pull（若落后远程），再 python3 {os.path.basename(__file__)} --src {a.src} --runtime {a.runtime} --apply  对齐。")
         return 1
     print("  ✓ 已对齐（已装 skill 与实例当前版本一致）。")
     return 0
