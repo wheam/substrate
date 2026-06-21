@@ -45,7 +45,7 @@ python3 <本 skill 目录>/migrate.py --instance <实例根> --engine <引擎根
 ## 流程（migrate.py 实现，对应 §9）
 
 1. **检测**：读实例 `governance/SUBSTRATE_VERSION` 与引擎 `ENGINE_VERSION`。`instance >= engine` → **版本闸门跳过**（多机幂等的关键）。
-2. **发现 pending**：扫 `migrations/`，取区间 `(instance, engine]` 内的迁移，按 `from_version` 升序排，并校验迁移链连续。
+2. **发现 pending**：扫 `migrations/`，取区间 `(instance, engine]` 内的迁移，按 `from_version` 升序排，校验迁移链连续，**且链必须抵达 `ENGINE_VERSION`**（否则即使全部应用实例仍落后于引擎——拒绝并转人工，不报假成功）。
 3. **不静默执行**：先生成**迁移计划**并打印（id / from→to / risk / title）。dry-run 到此为止。
 4. **前置闸门**（`--apply`）：实例必须是**干净的 git 仓库**（无未提交改动），否则拒绝——保证 tag 快照与回滚可靠；且**迁移前 doctor 必须 0 error**（有既有问题先修，否则无法区分既有问题与迁移引入的问题）。
 5. **按序应用**，每个迁移：
@@ -55,7 +55,7 @@ python3 <本 skill 目录>/migrate.py --instance <实例根> --engine <引擎根
    - **整体不变量**：迁移前后各跑 `substrate-doctor`，对比——迁移后必须 **0 error**，且 **md 文件数不减少**（增/拆文件允许、删减不允许——与 schema 认可的「加文件/拆文件」动作一致）、**zone 注册不丢**。
    - 成功 → bump 实例 `SUBSTRATE_VERSION` 到该迁移的 `to_version`。
 6. **失败任一步** → `git reset --hard pre-migrate-<from>` + `git clean -fd`（清掉失败 apply 的未跟踪残留，可安全重试）+ 报告 + 转人工。多迁移链中只回滚**当前失败的这一个**；**先前已成功的迁移已各自 commit、实例停在中间版本**（非原始版本）。
-7. **成功**：改动留在工作区，**由集成者/人审查后 commit + push**（本 skill 不自动 push）。多迁移连续时会在中间打轻量提交锚定下一个回滚点，集成者可 squash。
+7. **成功**：改动留在工作区，**由集成者/人审查后 commit + push**（本 skill 不自动 push）。多迁移连续时会在中间打轻量提交锚定下一个回滚点，集成者可 squash；**中间提交一旦失败（缺 git 身份 / pre-commit hook 拒绝）即回滚本迁移并中止**，绝不带着错位的回滚点继续。
 
 ## 安全护栏（关键，改 migrate.py 时必守）
 
