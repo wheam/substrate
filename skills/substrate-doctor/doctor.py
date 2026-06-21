@@ -26,9 +26,30 @@ def read_text(p):
     except Exception:
         return None
 
+def strip_indented_code(t):
+    """剥 CommonMark 缩进式代码块：以 ≥4 空格或 tab 缩进、且【前有空行或在文首】的连续行块
+    （缩进代码块不能打断段落，故必有前导空行；块内允许夹空行）。这样代码示例里的
+    [[wikilink]] 不会被误判断链。**保守**：只剥前有空行的缩进块，浅缩进（<4）列表续行或
+    无前导空行的缩进行一律保留——宁可漏剥也绝不把真实链接吞掉（避免漏报真断链）。"""
+    lines = t.split("\n")
+    out, prev_blank, i, n = [], True, 0, len(lines)
+    ind = lambda s: s.startswith("    ") or s.startswith("\t")
+    while i < n:
+        if prev_blank and ind(lines[i]) and lines[i].strip():
+            while i < n and ((ind(lines[i]) and lines[i].strip())
+                             or (lines[i].strip() == "" and i + 1 < n and ind(lines[i + 1]) and lines[i + 1].strip())):
+                i += 1                            # 吃掉缩进代码块整块（含块内空行），不计入输出
+            prev_blank = False
+            continue
+        out.append(lines[i])
+        prev_blank = (lines[i].strip() == "")
+        i += 1
+    return "\n".join(out)
+
 def strip_code(t):
     t = re.sub(r"```.*?```", "", t, flags=re.S)   # fenced blocks (backtick)
     t = re.sub(r"~~~.*?~~~", "", t, flags=re.S)   # fenced blocks (tilde)
+    t = strip_indented_code(t)                    # CommonMark 缩进式代码块（≥4 空格/tab，前有空行）
     t = re.sub(r"`[^`]*`", "", t)                 # inline code
     return t
 

@@ -231,6 +231,10 @@ def main():
     print(f"  → 搬入 {applied} 个；跳过 {len(plan_skip)}；待审 {len(plan_review)}。")
     print(f"  下一步: 在 {a.zone}/ 各目录补/更新 zone README（Agent Packet + 文件级索引），"
           f"再跑 substrate-doctor，最后交集成提交。")
+    if applied:
+        print("  ⚠ 预期: 刚搬入的页若缺 ≥2 个 [[wikilink]]、缺入链、或未登记进同目录 README，")
+        print("    substrate-doctor 会报「孤儿 / 互链不足 / 索引漂移」——这是宪法在要求补链，属正常，")
+        print("    补好互链 + 把页登记进 zone README 后即转绿（import 故意不伪造链接）。")
     return 0
 
 
