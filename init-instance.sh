@@ -1,7 +1,8 @@
 #!/bin/sh
 # init-instance.sh —— 从引擎脚手架一个【自包含】Substrate 实例。
-# 自包含 = 把引擎的 substrate-* 维护 skill **vendor（拷）进实例 skills/**，
-# 这样 clone 实例即同时拿到维护工具（BUILD-PLAN §13 的本意）；日常维护不再依赖引擎仓库在场。
+# 自包含 = 把引擎的 substrate-* 维护 skill **vendor（拷）进实例 skills/**，并把 adapters/ 一并 vendor，
+# 这样 clone 实例即同时拿到维护工具（BUILD-PLAN §13 的本意），且 sync 不带 --target 也能从实例内
+# 同级 adapters/ 推断安装目录；日常维护不再依赖引擎仓库在场。
 # （注意：跨引擎版本【升级/迁移】仍需引擎仓库——migrations/ 不 vendor，见文末。）
 #
 # 用法:
@@ -24,12 +25,22 @@ vendor_skills() {   # $1 = 实例 skills/ 目录
   done
 }
 
+vendor_adapters() {   # $1 = 实例根目录
+  # 把引擎 adapters/ 也 vendor 进实例，让自包含实例的 sync 不带 --target 也能从
+  # 同级 adapters/ 推断安装目录（修 MAJOR：旧版只 vendor skills/，sync 在实例内找不到 adapter）。
+  dest_root="$1"
+  rm -rf "$dest_root/adapters"
+  cp -R "$ENGINE/adapters" "$dest_root/adapters"
+  find "$dest_root/adapters" -name __pycache__ -type d -exec rm -rf {} + 2>/dev/null || true
+}
+
 # ── 刷新模式（引擎升级后重新 vendor）──
 if [ "${1:-}" = "--refresh" ]; then
   DEST="${2:?用法: init-instance.sh --refresh <实例目录>}"
   [ -d "$DEST/skills" ] || { echo "不是实例目录（无 skills/）: $DEST" >&2; exit 2; }
   vendor_skills "$DEST/skills"
-  echo "已把 vendored 维护 skill 刷新到引擎当前版本（ENGINE_VERSION=$(cat "$ENGINE/ENGINE_VERSION")）。"
+  vendor_adapters "$DEST"
+  echo "已把 vendored 维护 skill + adapters 刷新到引擎当前版本（ENGINE_VERSION=$(cat "$ENGINE/ENGINE_VERSION")）。"
   echo "下一步：重跑 sync 把更新装进 runtime，并跑 doctor 自检。"
   exit 0
 fi
@@ -42,6 +53,7 @@ NAME="${2:-$(basename "$DEST")}"
 mkdir -p "$DEST"
 cp -R "$ENGINE/template/." "$DEST/"
 vendor_skills "$DEST/skills"
+vendor_adapters "$DEST"
 
 # 填实例名占位（python3 替换，避免 sed 的 BSD/GNU 差异）
 python3 - "$DEST/README.md" "$NAME" <<'PY'
@@ -54,7 +66,7 @@ PY
 n_vendored="$(ls -d "$DEST"/skills/substrate-* 2>/dev/null | wc -l | tr -d ' ')"
 echo "✅ 实例已脚手架: $DEST"
 echo "   实例名: $NAME   基于引擎版本: $(cat "$ENGINE/ENGINE_VERSION")"
-echo "   已 vendor 维护 skill: $n_vendored 个（实例自包含，clone 即带工具）"
+echo "   已 vendor 维护 skill: $n_vendored 个 + adapters/（实例自包含，clone 即带工具 + sync 免 --target）"
 echo ""
 echo "下一步："
 echo "  1) cd \"$DEST\" && git init && git add -A && git commit -m 'init substrate instance'"

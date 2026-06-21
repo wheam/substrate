@@ -123,8 +123,19 @@ def main():
     if not os.path.isdir(a.src):
         print(f"substrate-sync: --src 不是目录: {a.src}"); return 2
     if not a.target:
-        adir = a.adapters_dir or os.path.join(
-            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "adapters")
+        if a.adapters_dir:
+            cands = [a.adapters_dir]
+        else:
+            # 优先按【实例】推断：--src 是 <instance>/skills，adapters/ 是它的同级目录。
+            # 这样不管 sync.py 待在引擎里、被 vendor 进自包含实例、还是 seed 到 runtime 的 skill 目录，
+            # 只要 --src 指向一个带同级 adapters/ 的 skills 目录就能定位（修 MAJOR：旧实现只按
+            # __file__ 上跳三级，自包含实例/seed 场景下 adapters/ 不在那 → 推断失败 exit 2）。
+            # 兜底再按本脚本相对引擎布局（旧行为），覆盖 --src 无同级 adapters 的情形。
+            cands = [
+                os.path.join(os.path.dirname(os.path.abspath(a.src)), "adapters"),
+                os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "adapters"),
+            ]
+        adir = next((c for c in cands if os.path.isfile(os.path.join(c, a.runtime, "adapter.yaml"))), cands[0])
         a.target, err = adapter_target(adir, a.runtime)
         if err:
             print(f"substrate-sync: {err}"); return 2
