@@ -110,6 +110,57 @@ def adapter_target(adapters_dir, runtime):
             target = fb
     return os.path.expanduser(target), None
 
+def instance_commit(src):
+    """--src 是 <instance>/skills；取实例仓库 HEAD commit（记录/检测 skill 版本对齐用）。非 git 返回 None。"""
+    inst = os.path.dirname(os.path.abspath(src))
+    try:
+        r = subprocess.run(["git", "-C", inst, "rev-parse", "HEAD"], capture_output=True, text=True)
+        return r.stdout.strip() if r.returncode == 0 else None
+    except Exception:
+        return None
+
+
+def do_check(a):
+    """检测本机已装 skill 是否与实例对齐：比对清单记录的 instance_commit vs 实例当前 HEAD，
+    并列出实例 skills/ 里选中本 runtime、但本机未安装的 skill。
+    退出码: 0=已对齐; 1=有漂移（该跑 sync --apply）; 2=没装过/清单缺失或损坏。"""
+    mpath = a.manifest or os.path.join(a.target, "installed-skills.json")
+    if not os.path.isfile(mpath):
+        print(f"substrate-sync --check: 没找到安装清单 {mpath}——本 runtime 还没装过，请先 --apply。")
+        return 2
+    try:
+        man = json.load(open(mpath, encoding="utf-8"))
+    except Exception as e:
+        print(f"substrate-sync --check: 清单损坏 {mpath}: {e}"); return 2
+    recorded = man.get("instance_commit")
+    cur = instance_commit(a.src)
+    installed_names = {s.get("name") for s in man.get("installed", [])}
+    src_names = set()
+    for entry in sorted(os.listdir(a.src)):
+        m = manifest_of(os.path.join(a.src, entry))
+        if m and selected(m["target_runtimes"], a.runtime):
+            src_names.add(entry)
+    missing = sorted(src_names - installed_names)
+
+    print(f"substrate-sync --check  runtime={a.runtime}")
+    print(f"  装机时实例 commit: {recorded or '(未记录)'}")
+    print(f"  实例当前 commit:   {cur or '(非 git/取不到)'}")
+    drift = []
+    if cur and recorded and cur != recorded:
+        drift.append(f"实例已更新（{recorded[:10]} → {cur[:10]}）——skill 可能过时")
+    if cur and not recorded:
+        drift.append("清单未记录 commit（旧版 sync 装的）——建议重 sync 以登记版本")
+    if missing:
+        drift.append(f"实例有 {len(missing)} 个未安装的 skill: {missing}")
+    if drift:
+        for d in drift:
+            print(f"  ⚠ {d}")
+        print(f"  → 不对齐：跑  python3 {os.path.basename(__file__)} --src {a.src} --runtime {a.runtime} --apply  对齐。")
+        return 1
+    print("  ✓ 已对齐（已装 skill 与实例当前版本一致）。")
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--src", default=".")
@@ -119,6 +170,7 @@ def main():
     ap.add_argument("--registry")
     ap.add_argument("--manifest")
     ap.add_argument("--apply", action="store_true")
+    ap.add_argument("--check", action="store_true", help="只检测：本机已装 skill 是否与实例当前版本对齐（不安装）")
     a = ap.parse_args()
     if not os.path.isdir(a.src):
         print(f"substrate-sync: --src 不是目录: {a.src}"); return 2
@@ -140,6 +192,8 @@ def main():
         if err:
             print(f"substrate-sync: {err}"); return 2
         print(f"  (--target 未给：从 adapter 推断为 {a.target})")
+    if a.check:
+        return do_check(a)
     dry = not a.apply
     plan_own, plan_reg, skipped, undeclared = [], [], [], []
 
@@ -212,7 +266,8 @@ def main():
             failed.append(p["name"])
 
     mpath = a.manifest or os.path.join(a.target, "installed-skills.json")
-    json.dump({"runtime": a.runtime, "installed": installed}, open(mpath, "w"), ensure_ascii=False, indent=2)
+    json.dump({"runtime": a.runtime, "instance_commit": instance_commit(a.src), "installed": installed},
+              open(mpath, "w"), ensure_ascii=False, indent=2)
     print(f"  → 装了 {len(installed)} 个；清单写入 {mpath}")
     if failed:
         print(f"  [WARN] {len(failed)} 个 registry 条目未安装: {failed}")

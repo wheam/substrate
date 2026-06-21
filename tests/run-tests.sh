@@ -276,6 +276,17 @@ expect_rc 0 "0002 --check 达标" python3 "$APP2" "$T11" --check
 python3 "$APP2" "$T11" --apply 2>&1 | grep -q "幂等\|无需改动" && ok "0002 幂等（再跑无改动）" || bad "0002 非幂等"
 expect_rc 0 "迁移后 doctor 0 error" python3 "$DOC" "$T11"
 
+echo "== 26) sync --check: 检测 skill 是否与实例版本对齐（agent 自检对齐用）=="
+T12="$(mktemp -d)/inst"
+sh "$ENGINE/init-instance.sh" "$T12" t12 >/dev/null 2>&1
+( cd "$T12" && git init -q && git -c user.name=t -c user.email=t@t add -A && git -c user.name=t -c user.email=t@t commit -q -m init )
+SKD="$(mktemp -d)"
+CLAUDE_SKILL_DIR="$SKD" python3 "$T12/skills/substrate-sync/sync.py" --src "$T12/skills" --runtime claude-code --apply >/dev/null 2>&1
+grep -q '"instance_commit": "[0-9a-f]' "$SKD/installed-skills.json" && ok "apply 把实例 commit 记进清单" || bad "清单未记录 instance_commit"
+expect_rc 0 "刚装完 --check 报对齐(rc=0)" env CLAUDE_SKILL_DIR="$SKD" python3 "$T12/skills/substrate-sync/sync.py" --src "$T12/skills" --runtime claude-code --check
+( cd "$T12" && echo x>n.md && git -c user.name=t -c user.email=t@t add -A && git -c user.name=t -c user.email=t@t commit -q -m change )
+expect_rc 1 "实例更新后 --check 报漂移(rc=1)" env CLAUDE_SKILL_DIR="$SKD" python3 "$T12/skills/substrate-sync/sync.py" --src "$T12/skills" --runtime claude-code --check
+
 echo
 echo "==== 结果: $PASS passed, $FAIL failed ===="
 [ "$FAIL" = 0 ]

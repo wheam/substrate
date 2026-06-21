@@ -1,6 +1,6 @@
 ---
 name: substrate-intake
-description: "判定一条新内容要不要进库、进哪个区、是否该拆成 skill（准入分类 + 自动回流守门）。当用户问「这个要不要存 / 存哪 / 这算知识还是 skill / 该不该进库」时使用。"
+description: "Decide whether a new item should enter the repo, which zone, and whether it should become a skill (admission classifier + auto-reflow gatekeeper). Use when the user asks 'should I save this / where does it go / is this knowledge or a skill'. 中文触发：「这个要不要存 / 存哪 / 这算知识还是 skill / 该不该进库」。"
 target_runtimes: [all]
 risk_level: medium
 capabilities: [shell]
