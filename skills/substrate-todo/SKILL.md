@@ -1,5 +1,6 @@
 ---
 name: substrate-todo
+description: "维护待办（todo/ zone：主人一份 + 每个 agent 一份）。当用户说「加个待办 / 记一下要做 X / 我的 todo / 还有啥没做 / 标记完成 / 清一下待办」时使用。"
 target_runtimes: [all]
 risk_level: medium
 capabilities: [shell]

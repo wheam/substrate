@@ -1,5 +1,6 @@
 ---
 name: substrate-migrate
+description: "把个人知识库从旧引擎版本安全迁移到新版本（有序 / 幂等 / 可验证 / 可回滚 / 不丢数据）。当用户说「升级库 / 迁移到新版本」，或一个 agent 发现实例版本落后于引擎版本时使用。"
 target_runtimes: [all]
 risk_level: high
 capabilities: [shell, modify-governance]

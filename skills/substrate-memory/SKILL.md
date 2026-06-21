@@ -1,5 +1,6 @@
 ---
 name: substrate-memory
+description: "维护「关于主人」的跨 agent 共享记忆（owner 的稳定事实 / 偏好 / 身份）。当用户说「记住我…/ 我的偏好是…/ 关于我…/ 把这个长期记住」，或任何 agent 需要了解「主人是谁、他的个人库是什么」时，读写 memory/about-owner。"
 target_runtimes: [all]
 risk_level: medium
 capabilities: [shell]

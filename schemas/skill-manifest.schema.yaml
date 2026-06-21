@@ -4,6 +4,7 @@ type: object
 required: [name, target_runtimes, risk_level]
 properties:
   name:            { type: string }
+  description:     { type: string, description: "★ agent 据此匹配用户意图来触发本 skill——写宽泛的触发词（如「记一下/存进知识库/我的个人仓库/我的笔记」），否则 agent 可能识别不到这个 skill。区别于内部用的 reason。" }
   source_agent:    { type: string, description: "回流来源 agent；自己写的可省" }
   created_at:      { type: string, format: date }
   reason:          { type: string, description: "为什么有这个 skill" }
