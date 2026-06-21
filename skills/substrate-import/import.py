@@ -29,7 +29,7 @@ SENSITIVE_HINTS = ("secret", "secrets", "credential", "credentials", "password",
 # 内容里命中这些模式的，标 REVIEW（可能含密钥/敏感原文）。保守、低误报。
 SENSITIVE_CONTENT = [
     re.compile(r"BEGIN[ A-Z]*PRIVATE KEY"),
-    re.compile(r"(?i)\b(api[_-]?key|secret|password|passwd|token)\s*[:=]\s*\S{6,}"),
+    re.compile(r"(?i)\b\w*(?:api[_-]?key|secret|password|passwd|token)\w*\s*[:=]\s*\S{6,}"),  # 含 OPENAI_API_KEY=/DATABASE_PASSWORD= 等下划线前缀环境变量
     re.compile(r"\bAKIA[0-9A-Z]{16}\b"),                 # AWS access key id 形态
     re.compile(r"\bxox[baprs]-[0-9A-Za-z-]{10,}"),       # slack token 形态
     re.compile(r"\bgh[pousr]_[0-9A-Za-z]{20,}"),         # GitHub token (ghp_/gho_/...)
@@ -48,10 +48,11 @@ def read_text(p):
 
 
 def slugify(name):
-    """文件名 → 全小写、连字符、无空格的 slug（保留扩展名由调用方处理）。"""
+    """文件名 → 全小写、连字符、无空格的 slug。保留 unicode 文字（中日韩/西里尔等不被剥成 untitled，
+    否则多个非 ASCII 名都会坍缩成 untitled 互相撞名而无法导入）。"""
     s = name.lower()
     s = re.sub(r"[\s_]+", "-", s)
-    s = re.sub(r"[^a-z0-9.\-]", "", s)
+    s = re.sub(r"[^\w.\-]", "", s, flags=re.UNICODE)   # 保留 \w（含 unicode 文字/数字），去其余标点
     s = re.sub(r"-{2,}", "-", s).strip("-")
     return s or "untitled"
 
@@ -164,6 +165,10 @@ def main():
         print(f"substrate-import: --instance 不是目录: {instance}"); return 2
     if a.date != DATE_PLACEHOLDER and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", a.date):
         print(f"substrate-import: --date 须是 YYYY-MM-DD: {a.date}"); return 2
+    # 防 --zone 含 ../ 把文件写到实例根之外
+    zone_abs = os.path.abspath(os.path.join(instance, *a.zone.split("/")))
+    if os.path.commonpath([instance, zone_abs]) != instance:
+        print(f"substrate-import: --zone 越出实例根，拒绝: {a.zone}"); return 2
 
     items = scan(source, a.adapter)
     dry = not a.apply
