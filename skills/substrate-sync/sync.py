@@ -43,7 +43,11 @@ def manifest_of(skill_dir):
     sk = os.path.join(skill_dir, "SKILL.md")
     if not os.path.isfile(sk): return None
     t = open(sk, encoding="utf-8-sig", errors="replace").read()
-    return {"target_runtimes": field(t, "target_runtimes") if t.lstrip().startswith("---") else []}
+    is_fm = t.lstrip().startswith("---")
+    sup = re.search(r"(?m)^superseded_by:\s*(\S+)", t) if is_fm else None
+    return {"target_runtimes": field(t, "target_runtimes") if is_fm else [],
+            "deprecated": bool(re.search(r"(?m)^deprecated:\s*true\b", t)) if is_fm else False,
+            "superseded_by": (sup.group(1).strip("'\"") if sup else None)}
 
 def selected(runtimes, runtime):
     """fail-closed：未声明 target_runtimes（[]）不算选中。要全 runtime 显式写 [all]。"""
@@ -175,9 +179,14 @@ def do_check(a):
     cur_tree = skills_tree(a.src)
     installed_names = {s.get("name") for s in man.get("installed", [])}
     src_names = set()
+    retired_present = []
     for entry in sorted(os.listdir(a.src)):
         m = manifest_of(os.path.join(a.src, entry))
-        if m and selected(m["target_runtimes"], a.runtime):
+        if not m: continue
+        if m["deprecated"] or m["superseded_by"]:
+            if os.path.isdir(os.path.join(a.target, entry)):
+                retired_present.append(entry)   # 退役但本机还残留 → 该 --apply 清掉
+        elif selected(m["target_runtimes"], a.runtime):
             src_names.add(entry)
     missing = sorted(src_names - installed_names)
 
@@ -199,6 +208,8 @@ def do_check(a):
         drift.append("清单未记录 skills_tree（旧版 sync 装的）——建议重 sync 以登记版本")
     if missing:
         drift.append(f"实例有 {len(missing)} 个未安装的 skill: {missing}")
+    if retired_present:
+        drift.append(f"{len(retired_present)} 个已退役 skill 仍在本机: {retired_present}（sync --apply 会移除）")
     if drift:
         for d in drift:
             print(f"  ⚠ {d}")
@@ -242,12 +253,15 @@ def main():
     if a.check:
         return do_check(a)
     dry = not a.apply
-    plan_own, plan_reg, skipped, undeclared = [], [], [], []
+    plan_own, plan_reg, skipped, undeclared, retired = [], [], [], [], []
 
     for entry in sorted(os.listdir(a.src)):
         d = os.path.join(a.src, entry)
         man = manifest_of(d)
         if man is None: continue
+        if man["deprecated"] or man["superseded_by"]:
+            retired.append({"name": entry, "superseded_by": man["superseded_by"]})  # 退役件：不装，且从 target 清掉旧副本
+            continue
         rts = man["target_runtimes"]
         if not rts:
             undeclared.append(entry)             # fail-closed：未声明 target_runtimes，不装
@@ -267,6 +281,10 @@ def main():
     for s in skipped:  print(f"  skip     {s}  (runtime 不匹配)")
     for u in undeclared: print(f"  skip     {u}  (未声明 target_runtimes；要装请写 [all] 或含本 runtime)")
     for n in reg_rejected: print(f"  REJECT   {n!r}  (非法 skill 名，疑似路径穿越——拒绝安装)")
+    for r in retired:
+        sb = f"，superseded_by {r['superseded_by']}" if r["superseded_by"] else ""
+        here = os.path.isdir(os.path.join(a.target, r["name"]))
+        print(f"  retire   {r['name']}  (已退役{sb}；{'从 target 移除旧副本' if here else '不安装'})")
 
     if dry:
         print(f"  → 计划 {len(plan_own)} own + {len(plan_reg)} registry-git"
@@ -275,7 +293,14 @@ def main():
         return 0
 
     os.makedirs(a.target, exist_ok=True)
-    installed, failed = [], []
+    installed, failed, removed = [], [], []
+    for r in retired:   # 退役 skill：从 target 清掉旧副本（防 personal-wiki 式陈旧、冲突的残留）
+        dest = os.path.join(a.target, r["name"])
+        if os.path.isdir(dest) and safe_name(r["name"]) and within_target(a.target, dest):
+            shutil.rmtree(dest, ignore_errors=True)
+            removed.append(r["name"])
+    if removed:
+        print(f"  [RETIRE] 移除已退役 skill: {removed}")
     for p in plan_own:
         dest = os.path.join(a.target, p["name"])
         if os.path.isdir(dest): shutil.rmtree(dest)

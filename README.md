@@ -50,16 +50,23 @@ Hand the engine URL + the prompt below to any agent that can run shell commands 
 I want to set up a personal knowledge base using the Substrate engine:
 https://github.com/wheam/substrate
 
-Please do it for me:
-1. Clone the engine to a temp dir and read its README.
-2. Ask me for: where to put my instance, a short instance name, my GitHub username.
-3. Scaffold my private instance: run ./init-instance.sh <dir> <name>, then
+Please do it for me, and STOP and tell me if any step fails (don't silently continue):
+1. Check prereqs: git + python3 (>=3.8) exist, and git is authenticated to GitHub
+   (`gh auth status`, or an SSH key, or an HTTPS token). If auth is missing, stop and
+   tell me how to set it up — clone/push will dead-end without it.
+2. Clone the engine to a temp dir and read its README.
+3. Ask me for: where to put my instance, a short instance name, my GitHub username.
+4. Scaffold my private instance: run ./init-instance.sh <dir> <name>, then
    `git init && git add -A && git commit -m "init"` inside it.
-4. Install the maintenance skills into YOUR runtime:
+5. Install the maintenance skills into YOUR runtime:
    python3 <instance>/skills/substrate-sync/sync.py --src <instance>/skills --runtime <your-runtime> --apply
-5. Run substrate-doctor on the instance and confirm 0 errors.
-6. Tell me how to push the instance to a PRIVATE GitHub repo, and give me a few
-   example phrases to start using it.
+   Then VERIFY at least one skill was actually installed. If 0 were installed, the
+   --runtime value is wrong for your agent — stop and ask me.
+6. Run substrate-doctor on the instance; if it reports any ERROR, stop and show me.
+7. Create a PRIVATE GitHub repo, add it as the remote, and `git push -u origin main`.
+   VERIFY the push actually succeeded — a local-only instance silently disables all
+   multi-machine sync. If you can't push, stop and tell me exactly what to fix (auth).
+8. Give me a few example phrases to start using it.
 
 Never put any of my personal content into the public engine repo.
 ```
@@ -68,7 +75,9 @@ Never put any of my personal content into the public engine repo.
 
 > ### 方式 B —— 手动 4 步
 
-**Prereqs / 前置**: `git`, `python3` (standard library only — **no pip installs**), and an agent runtime that can read skills.
+**Prereqs / 前置**: `git` **authenticated to GitHub** (`gh auth login`, or an SSH key, or an HTTPS token — you'll push your instance to a **private** repo, so set this up first), `python3` ≥ 3.8 (standard library only — **no pip installs**), and an agent runtime that can read skills.
+
+> **前置**：`git`（**先认证到 GitHub**——`gh auth login` / SSH key / HTTPS token，因为下一步要把实例推到**私有**仓库，没认证会卡在 clone/push）、`python3` ≥ 3.8（仅标准库，**无需 pip**）、一个能读 skill 的 agent runtime。
 
 ```sh
 # 1) Get the engine (or fork it to your account first)
@@ -83,6 +92,9 @@ cd ~/my-cortex && git init && git add -A && git commit -m "init my substrate ins
 python3 ~/my-cortex/skills/substrate-sync/sync.py \
         --src ~/my-cortex/skills --runtime claude-code --apply
 #   Swap --runtime for codex / hermes / … (see adapters/)
+#   NOTE: claude-code + generic-filesystem are verified; codex/hermes adapter paths are
+#   provisional (declared, not yet round-tripped on real hardware) — after install, verify
+#   the skill actually landed where your agent reads skills from.
 
 # 4) Onboard your agent: tell it "get set up on my personal repo"
 #    → triggers substrate-bootstrap (reads the constitution + zones, sets identity, self-checks)
@@ -121,9 +133,9 @@ The repo is co-maintained, so each machine's copy can fall behind. At the start 
 > ## 多机/多 agent 保持一致
 > 仓库是共维的,每台机器的副本都可能落后。每次开工让 agent 跑自检:`git pull` → `substrate-sync --check` → 落后则 `--apply` → `substrate-doctor`。`--check` 会顺带 `git fetch` 比对远程、**本地落后也能发现**,所以静默失败的 pull 不会冒充"已最新"。
 
-To fully automate it, wire your runtime's own session-start hook to run that routine (see `template/governance/bootstrap.md`).
+To fully automate it, wire your runtime's own session-start hook to run that routine. A copy-pasteable Claude Code `SessionStart` hook ships in `adapters/claude-code/README.md`; for other runtimes see `template/governance/bootstrap.md`.
 
-> 想全自动,就给你的 runtime 接一个原生的会话启动钩子跑这套(见 `template/governance/bootstrap.md`)。
+> 想全自动,就给你的 runtime 接一个原生的会话启动钩子跑这套。Claude Code 的现成 `SessionStart` hook 模板在 `adapters/claude-code/README.md`;其它 runtime 见 `template/governance/bootstrap.md`。
 
 ---
 

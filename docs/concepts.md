@@ -20,13 +20,14 @@
 - **Zone（分区）**：仓库里一个有独立 schema + 维护行为 + 访问模式的内容区。每个 zone 在 `governance/zones.md` 顶部的可解析 YAML 块里注册一条，字段契约见 `schemas/zone.schema.yaml`。
 - **Governance（治理）**：`governance/` 目录里那套「怎么维护本仓库」的规则与协议。
 - **CONSTITUTION（宪法）**：少而硬的全局不变量 + 「新增类型」procedure。所有维护 skill 引用的唯一权威；改规则只改这一处。
-- **Admission（准入）**：内容能否进库、以什么形态进的判定规则。核心是**入库四问**与**四种去向**（见下）。
+- **Admission（准入）**：内容能否进库、以什么形态进的判定规则。核心是**入库四问**与**四种入库去向**（见下）。
 - **入库四问**：① 持久？② 属于个人 context？③ 可文件化且适合 git？④ 跨 agent 有共享价值？四问皆是才考虑进库。
-- **四种去向（disposition）**：
+- **四种入库去向（admission outcome）**：对**一条新内容**的准入判定结果（页/条目级）。
   - **Canonical**：进库成事实源。
   - **Reference**：只存引用 + 摘要 + 文字代理（不存本体，如多媒体）。
   - **Local-only**：只留本机，不入库。
   - **Forbidden**：密钥 / 凭据 / 敏感原文 / 大二进制——**永不进库**。
+  > ⚠️ 别和 zone 级的 `disposition` 字段混淆：那是 `zones.md` 里**整个 zone** 的存储取向，只 `{canonical, reference}` 两值（见 `schemas/zone.schema.yaml`）。此处四种是**单条内容**的准入去向，是不同层级、不同取值集的概念。
 - **Zone vs Page**：仅当有独立 schema + 维护行为 + 访问模式才开新顶层 zone；否则是已有 zone 的一页 / 一行。
 - **Graduation（毕业）**：一个 zone 随规模增长而升级存储/索引形态的预声明路径（如行式 canonical → 分片 → SQLite 缓存）。写在 zone 的 `graduation` 字段；doctor 监测阈值、越线只提议；执行由迁移 skill / 人确认后 deliberate 做。**SQLite 永远先做缓存，不当 canonical。**
 
@@ -47,7 +48,7 @@
 
 ## 升级 / 防退化
 
-- **Migration（迁移）**：把「引擎版本升级」当数据库迁移做——有序、命名、**幂等**、可验证、可回滚的 vN→vN+1 变换。契约见 `schemas/migration.schema.yaml`。任何迁移不丢数据：git tag 快照 + doctor 前后校验 + 模糊内容进隔离区。
+- **Migration（迁移）**：把「引擎版本升级」当数据库迁移做——有序、命名、**幂等**、可验证、**可回滚**（=失败时 `git reset` 到 `pre-migrate-<from>` tag **整体恢复**，**非** vN→vN-1 反向迁移；引擎不提供反向迁移）的 vN→vN+1 变换。有序清单见 `migrations/INDEX.md`，契约见 `schemas/migration.schema.yaml`。任何迁移不丢数据：git tag 快照 + doctor 前后校验 + 模糊内容进隔离区。
 - **`SUBSTRATE_VERSION`**：实例在 `governance/SUBSTRATE_VERSION` 记录自己基于的引擎版本（committed）。`instance.version < engine.version` 即有 pending 迁移。
 - **Doctor（体检）**：增量防退化体检（断链 / 孤儿 / 索引漂移 / 缺 frontmatter / registry 风险 / 毕业阈值），**同时是迁移的测试套件**（迁移前后跑同一套不变量检查）。为可复现 + 便宜 + 可在 CI 跑，doctor skill 内嵌零安装的确定性 shell（grep / sort / python3 解析 YAML），不依赖独立二进制。
 

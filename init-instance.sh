@@ -14,6 +14,14 @@ set -eu
 
 ENGINE="$(cd "$(dirname "$0")" && pwd)"
 
+# ── 环境预检：快失败、给可操作信息，别让新机器在脚手架半途吐原始 traceback ──
+command -v python3 >/dev/null 2>&1 || {
+  echo "✗ 需要 python3（脚手架与所有维护 skill 都依赖它，且只用标准库——无需 pip）。请先安装 python3 ≥ 3.8。" >&2; exit 2; }
+python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3,8) else 1)' 2>/dev/null || {
+  echo "✗ 需要 python3 ≥ 3.8（当前 $(python3 -V 2>&1)）。" >&2; exit 2; }
+command -v git >/dev/null 2>&1 || \
+  echo "⚠ 未检测到 git：脚手架能继续，但下一步『git init / 推到私有 GitHub 远程』需要它——建议先装并登录（gh auth login / SSH key / HTTPS token）。" >&2
+
 vendor_skills() {   # $1 = 实例 skills/ 目录
   dest_skills="$1"
   for d in "$ENGINE"/skills/*/; do
@@ -23,6 +31,10 @@ vendor_skills() {   # $1 = 实例 skills/ 目录
     cp -R "$d" "$dest_skills/$name"
     rm -rf "$dest_skills/$name/__pycache__"   # 别把字节码缓存带进实例
   done
+  # 标记这批 vendored skill 来自哪个引擎版本（execution plane）。
+  # doctor 用它 vs governance/SUBSTRATE_VERSION（data plane）比对，抓「--refresh 了 skill 却没 migrate」
+  # （或反之）的版本错位。--refresh 重 vendor 时一并更新；migrate 成功后会 bump SUBSTRATE_VERSION，二者复归一致。
+  printf '%s\n' "$(cat "$ENGINE/ENGINE_VERSION")" > "$dest_skills/.engine-version"
 }
 
 vendor_adapters() {   # $1 = 实例根目录
