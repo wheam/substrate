@@ -15,6 +15,12 @@ MIG="$ENGINE/skills/substrate-migrate/migrate.py"
 # 不让 py_compile / python 往源码目录或只读 HOME 缓存写 pyc（受限环境会 PermissionError）。
 export PYTHONPYCACHEPREFIX="$(mktemp -d)"
 
+# CI（GitHub ubuntu runner）默认禁 git 的 'file' 传输（CVE-2022-39253）→ 从本地裸库 push/clone/fetch
+# 会报 "transport 'file' not allowed"，令 §27（检测落后远程：本地路径 origin + 二次 clone push 回去）
+# 误判 rc0 而挂 CI（本地 macOS 默认放行故通过）。用 GIT_CONFIG_* 放开——进程作用域、会被 sync.py 的子进程
+# git 继承、且不改任何真实 gitconfig（测试全在 mktemp 沙盒里；真实实例 remote 是 GitHub URL，不走 file 传输）。
+export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=protocol.file.allow GIT_CONFIG_VALUE_0=always
+
 PASS=0; FAIL=0
 ok()   { PASS=$((PASS+1)); printf "  ok   - %s\n" "$1"; }
 bad()  { FAIL=$((FAIL+1)); printf "  FAIL - %s\n" "$1"; }
