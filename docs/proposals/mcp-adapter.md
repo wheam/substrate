@@ -81,10 +81,17 @@ MCP **两者都不是**：它既不往某 runtime 装 skill，也不是只读视
 
 > **`migrate` 不进网关**——它是引擎侧、需引擎仓库在场的操作，留作**主机侧管理任务**（见 §4 运维）。网关只暴露日常读写，不暴露跨版本迁移这种高风险动作。
 
-### 2.3 治理随 MCP 下发
+### 2.3 触发机制与治理下发
 
-- 每个 tool 的 `description` 内嵌触发词与红线（取自对应 `SKILL.md` 的 `description` 字段）。
-- 暴露只读 resource `substrate://governance`：吐 `CONSTITUTION` 摘要 + 目标 zone 的 Agent Packet。远端 agent **写前先读它** → 即便没装 skill 也守宪法。
+**工具怎么被触发（与 skill 同源）**：MCP 工具是**模型自动调用**的——client 连上 server 后把工具清单（`name` + `description` + 入参 schema）注入模型上下文，模型拿用户意图去和各工具的 `description` 做匹配，命中就发调用。**这与 skill 的触发是同一套意图匹配**：skill 靠 `SKILL.md` 的 `description`，MCP 工具靠 tool 的 `description`，没有独立的"触发词字段"。**工程含义**：
+
+- 每个 tool 的 `description` 直接**复用对应 `SKILL.md` 的触发词**（含多语言说法），触发率才稳。
+- 工具集**保持小而清晰**：工具过多 / 描述含糊会让模型选错或漏调，且工具 schema **常驻上下文烧 token**（MCP 的"工具膨胀"是已知坑）。首发只上 §2.2 最小集。
+
+**治理怎么随之下发**：
+
+- **`instructions` 注入系统提示**：MCP server 初始化时返回的 `instructions` 字段会被 client 注入系统提示——用它声明"这是主人的 Substrate 实例；涉及笔记 / 记忆 / 收藏 / 待办用这些工具；写前先勘察并读 `substrate://governance`"。这是让治理**主动**生效的关键通道。
+- **`substrate://governance` resource**（只读：`CONSTITUTION` 摘要 + 目标 zone 的 Agent Packet）：注意 **resource 默认不被模型自动触发**（不同于工具），所以不能只摆着——要靠上面的 `instructions` + 写工具 `description` 里硬性要求"调用前先读它"，治理才真落地。
 - **Forbidden 守门**（密钥 / 凭据 / 敏感原文 / 大二进制永不入库）在 server 侧**再校验一遍**，不只靠远端 agent 自觉——纵深防御的一环。
 
 ### 2.4 两种部署形态
@@ -103,6 +110,38 @@ MCP **两者都不是**：它既不往某 runtime 装 skill，也不是只读视
 - 二者都 `push` 到同一个私有 GitHub 实例仓库，自然合流。
 
 → 既拿到"集中、省事、手机能用"，又保留"本地、离线、可手翻"，**不把鸡蛋全押在主机一个篮子里**（主机挂了，主力机仍能离线工作）。
+
+### 2.6 客户端接入与降级（取决于 runtime，不取决于模型）
+
+**"能不能用网关"是 agent 的 runtime / harness 的属性，不是底层模型的属性。** 模型只负责 function-calling；真正去"连 server、拉工具清单、注入上下文、执行调用"的是包着模型的那层代码。所以接入前提是：
+
+- 该 runtime **实现了 MCP client**（支持 stdio 与 / 或 streamable HTTP 传输）。具备的 runtime 零改造即可连；
+- **连接是 client → server 出站**：client 主动拨向 `<mcp-host>`，**client 侧无需开入站端口**，NAT / 防火墙后亦可用。
+
+**降级路径（与 skill-runtime 互补，不互斥）**：
+
+- runtime **不是 MCP client** → 回退到现有 **skill-runtime adapter**（本地 clone + 装 skill，§1.1 的 git 分发式），或由其自有 harness 直接调网关的 HTTP 端点；
+- 即网关（`kind: gateway`）与 skill-runtime 两条路**并存**：同一实例可同时被"装了 skill 的本地 runtime"和"连网关的远程 runtime"消费。
+
+### 2.7 选型权衡：本地 skill 维护 vs MCP 网关
+
+两条路都靠 `description` **自动触发**（见 §2.3），区别不在"自不自动"，而在 **活儿在哪跑、跨不跨网络边界**。供落地时按场景选：
+
+| 维度 | A：本地 + skill | B：MCP 网关 |
+|---|---|---|
+| 单步 / 多步延迟 | 本地磁盘，快；仅 `pull/push` 走网络 | **每次 tool 调用一次网络往返**，多步流程累加 |
+| 并发 / 一致性 | 各机各 clone，靠 git 解冲突；可能读到旧数据 | 单主机**串行化单写者**，client 间天然一致 |
+| 可用性 / 离线 | 每机自洽、可离线、无单点 | 依赖主机 + 网络，**主机挂 = 远端失忆（单点）** |
+| 数据暴露面 | **整库 clone 到每台设备** | 数据只在主机；远端只持 **scoped token**，不持全库 |
+| 凭据爆炸半径 | 每台设备都有 git 写凭据 + 全量数据；某台失陷波及全库，已有 clone 收不回 | 远端只有可即时吊销的 scoped token，半径小 |
+| 治理强度 | 靠每台装了 skill 并照做（自觉） | server 端 `instructions` + doctor 硬闸**集中强制**，绕不过 |
+| 接入新 agent | 每台 clone + sync skill（N 台 N 次） | 指个端点 + 给 token（近零） |
+| 上下文 token | 读 `SKILL.md` + 文件进上下文 | 工具 schema 常驻上下文；read 工具可只回切片 |
+| 可观测 / 审计 | git history + 各机散落日志 | **中心审计**：每次调用谁 / 何工具 / 何时一处可查 |
+| 能力面 | 全 shell + 文件，能干任何事（更猛也更险） | 只能调暴露的工具（更安全，但未暴露的远程做不了） |
+| 额外成本 | 用现有机器，零额外 | 一台 24/7 主机（钱 + 运维） |
+
+**结论**：要快 / 离线 / 全权且机器可信 → 倾向 A；要省事接入异构或受限设备、数据不落地到每台、集中审计与强制治理 → 倾向 B。二者可**混合**（§2.5）：受限 / 边缘设备走 B，主力机留 A。
 
 ---
 
@@ -186,6 +225,23 @@ local_state:
 5. **备份**：git 全历史 + push 到私有 GitHub 即备份；`pre-migrate-<from>` tag 永远可回滚。
 6. **单点故障（正视）**：主机挂 = 这些远端 agent 当场失忆。**缓解 = §2.5 混合部署**——主力机保留本地副本 + skill，网关是叠加层，所有写最终汇到同一 GitHub 实例仓库。
 7. **协议演进**：把"跟踪 MCP 协议版本变化"纳入引擎维护清单；server 启动声明 capabilities 与协议版本；SDK 升级走常规依赖升级。
+8. **无状态主机设计（关键）**：把网关当**可丢弃**的——**开机从 GitHub `clone` 实例工作副本，每次写即 `commit + push`**。于是临时文件系统的主机（容器 / PaaS，重启即重置）也不丢数据：**持久真相在 git remote，不在主机磁盘**。主机上唯一的本地状态是 audit log + token（不入库；token 走环境变量 / secret）。需要持久磁盘时才挂卷，多数场景无需。
+
+### 4.1 主机部署与暴露形态（引擎中立）
+
+网关是 client → server 出站连接，所以**主机要解决的只是"让 client 够得着"**。按"client 是否需额外接入"分几类，引擎不绑定任何具体产品：
+
+| 形态 | 需公网 IP？ | client 需额外接入？ | 取舍 |
+|---|---|---|---|
+| **托管平台公网端点** | 否（平台给 HTTPS） | 否（拿 URL + token） | 最省网络配置；数据驻第三方 + 须配无状态（见上） |
+| **自托管 + 公网 IP 直连** | 是（须真公网、最好静态；当心 CGNAT / 动态 IP） | 否 | 简单可达，但**暴露面最大**：须自管 TLS + 强 token + 防火墙 + 打补丁 |
+| **反向隧道**（主机出站到隧道商） | 否 | 否（拿公网 URL + token） | 无公网 IP / 无端口转发 / TLS 托管；多依赖一个隧道商 |
+| **mesh / overlay VPN** | 否 | **是**（client 须入同一私网） | 网络层隔离最强（仅自有设备可达 + ACL）；每个 client 要接入私网 |
+
+**两条不变的原则**：
+
+- **token 鉴权与网络层无关，始终要配**（纵深防御）：公网形态下它是唯一防线，私网形态下它是第二层——某台设备失陷不应自动拿到无 scope 权限。
+- **信任边界**：主机持有实例工作副本 + 写 token；缓解靠"git remote 为持久真相源 + scoped token + 即时吊销"。是否接受数据驻于某主机，是部署者按自身信任模型的取舍，**不属引擎机制**。
 
 ---
 
@@ -203,8 +259,8 @@ local_state:
 | 里程碑 | 内容 | 验收 |
 |---|---|---|
 | **M1** | `kind: gateway` 接口 + `adapters/mcp/` + `sync.py` 跳过 gateway + **stdio 最小 server**（`search` / `read` / `doctor` / `collection_add` 四工具）+ 测试 | 一个 MCP client 经 stdio 连上，能搜/读/体检/加一行 collection，doctor 0 error |
-| **M2** | `substrate_write_page`（知识 / 记忆受控写）+ resource `substrate://governance` + Forbidden 复校 | 远端 agent 不装 skill，仅凭网关写出一篇合规知识页（≥2 wikilink + 索引更新 + doctor 通过） |
-| **M3** | 远程传输（streamable HTTP）+ token 鉴权 + read/write scope + 部署文档（systemd / 容器、TLS、`fleet` 角色） | 两台机器远程连同一 `<mcp-host>`，read-only token 写被拒、read-write token 写成功 |
+| **M2** | `substrate_write_page`（知识 / 记忆受控写）+ resource `substrate://governance` + `instructions` 注入 + Forbidden 复校 | 远端 agent 不装 skill，仅凭网关写出一篇合规知识页（≥2 wikilink + 索引更新 + doctor 通过） |
+| **M3** | 远程传输（streamable HTTP）+ token 鉴权 + read/write scope + 无状态主机设计（见 §4）+ 部署文档（暴露形态见 §4.1、`fleet` 角色） | 两台机器远程连同一 `<mcp-host>`，read-only token 写被拒、read-write token 写成功 |
 | **M4** | 审计日志 + 并发串行化 + doctor cron + 混合部署指南 | 并发写不撕裂；审计可追溯；主机挂后主力机离线可用 |
 
 ---
