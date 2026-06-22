@@ -1,6 +1,6 @@
 ---
 name: substrate-doctor
-description: "Anti-rot health check on the personal knowledge base (broken links / orphans / frontmatter / index drift / collection counts / registry / graduation thresholds). Read-only. Use when the user says 'health check / check my repo / is the repo OK / run doctor'. 中文触发：「体检 / 检查我的库 / 库有没有问题 / 跑一下 doctor / 库健康吗」。"
+description: "Anti-rot health check on the personal knowledge base (broken links / orphans / frontmatter / index drift / collection counts / registry / graduation thresholds / committed secrets). Read-only. Use when the user says 'health check / check my repo / is the repo OK / run doctor'. 中文触发：「体检 / 检查我的库 / 库有没有问题 / 跑一下 doctor / 库健康吗」。"
 target_runtimes: [all]
 risk_level: medium
 capabilities: [shell]
@@ -9,7 +9,7 @@ reason: 防退化体检 + 迁移测试套件（只读：运行确定性 shell，
 
 # substrate-doctor — 防退化体检
 
-对一个 **Substrate 实例**跑确定性体检：断链 / 孤儿 / frontmatter / 索引漂移 / 收藏计数 / registry pin / 毕业阈值。
+对一个 **Substrate 实例**跑确定性体检：断链 / 孤儿 / frontmatter / 索引漂移 / 收藏计数 / registry pin / 毕业阈值 / 密钥扫描。
 **只读**——只报告，不自动改。它同时是**迁移的测试套件**（迁移前后各跑一次对比不变量）。
 
 ## 何时用
@@ -25,7 +25,7 @@ python3 <本 skill 目录>/doctor.py <实例根目录>
 ```
 
 读输出：
-- `[ERROR]` = 必须修（断链/孤儿/缺 frontmatter/索引漂移/计数漂移/registry 缺 pin）。**退出码 1**，CI/迁移闸门据此拒绝。
+- `[ERROR]` = 必须修（断链/孤儿/缺 frontmatter/索引漂移/计数漂移/registry 缺 pin/**提交了密钥**）。**退出码 1**，CI/迁移闸门据此拒绝。
 - `[ADVICE]` = 毕业建议（某收藏越过 `zones.md` 的 `graduation` 阈值）——只提议，由人/迁移 skill 决定。退出码 0。
 - 退出码 **2** = 调用错误（如实例路径不对）。CI/迁移闸门用 `exit != 0` 判断，别只判 `== 1`。
 
@@ -45,6 +45,7 @@ python3 <本 skill 目录>/doctor.py <实例根目录>
 | registry | `skills/_registry.md` 条目缺 `pin`（ERROR）；pin 是 main/master/HEAD 却未声明 `trusted_floating: true`（WARN） |
 | skill 清单（warn） | `skills/<name>/SKILL.md` 应是合规 manifest（缺 `name/target_runtimes/risk_level` → WARN，见 skill-manifest.schema） |
 | 毕业（advice） | 收藏行数 > `zones.md` `graduation: rows>N` 阈值 |
+| 密钥扫描 | 任何内容页（**豁免 `skills/`**——那里有检测器自身与文档示例的 token）命中**高置信凭据形态**（PEM 私钥 / AWS / GitHub / Google / Slack / Stripe / OpenAI·Anthropic / JWT）→ **ERROR**（红线「密钥永不进库」）；低置信「标签词+高熵串」→ WARN；`privacy: sensitive` zone（如 `memory/`）命中额外标注 |
 
 ## 实现约束（改 doctor.py 时必守）
 
@@ -52,5 +53,6 @@ python3 <本 skill 目录>/doctor.py <实例根目录>
 - 抽 `[[wikilink]]` 前**先剥离 inline code 与 fenced code block**。
 - 孤儿/frontmatter 检查**豁免** governance/*、`skills/*`（其顶部是 skill-manifest，不是内容页）与 README/索引/分片结构页。
 - 计数漂移只校验与 `data.csv` 同目录的索引页；分类分片是子集，不与主表总数比（否则多类别分片必误报）。
+- **密钥扫描的模式与 `substrate-import/import.py` 的 `SENSITIVE_CONTENT` 同源、须同步**：import 在入口拦（标 REVIEW 不导入），doctor 在已提交内容里兜底（ERROR）。doctor 按置信度分档——形态类凭据 ERROR、标签+高熵启发 WARN（避免误伤正文里的 `password: changeme` 这类）。改一处务必同改另一处。
 
 > 当作迁移测试套件：迁移前存一份 `doctor` 计数快照，迁移后再跑，不变量对不上就拒绝（回滚到 `pre-migrate-<from>` tag）。

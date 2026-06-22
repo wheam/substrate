@@ -15,6 +15,28 @@ import sys, os, re, glob, csv
 
 REQUIRED_FRONTMATTER = ["title", "created", "updated", "type"]
 MANIFEST_REQUIRED = ["name", "target_runtimes", "risk_level"]   # 见 schemas/skill-manifest.schema.yaml
+
+# 密钥/凭据扫描（红线「Forbidden：密钥永不进库」的检测层）。
+# 与 substrate-import/import.py 的 SENSITIVE_CONTENT 同源、须同步；此处按置信度分两档：
+#   ERROR 档 = 高置信「形态类」凭据（真实凭据的固定形态，几乎不误报）→ 报错、拒绝「健康」。
+#   WARN  档 = 低置信「标签+值」启发（如 `password: changeme`）→ 仅提醒复核，不误伤正文、不改退出码。
+# 扫描豁免 skills/ 子树：那里有检测器本身与文档示例里的 token 形态（会自我误报）。
+SECRET_PATTERNS_ERROR = [
+    (re.compile(r"BEGIN[ A-Z]*PRIVATE KEY"),                 "PEM 私钥"),
+    (re.compile(r"\bAKIA[0-9A-Z]{16}\b"),                    "AWS access key id"),
+    (re.compile(r"\bxox[baprs]-[0-9A-Za-z-]{10,}"),          "Slack token"),
+    (re.compile(r"\bgh[pousr]_[0-9A-Za-z]{20,}"),            "GitHub token"),
+    (re.compile(r"\bgithub_pat_[0-9A-Za-z_]{20,}"),          "GitHub fine-grained PAT"),
+    (re.compile(r"\bAIza[0-9A-Za-z_\-]{30,}"),               "Google API key"),
+    (re.compile(r"\bsk_live_[0-9A-Za-z]{16,}"),              "Stripe live key"),
+    (re.compile(r"\bsk-(?:proj|ant|svcacct)[-_]?[A-Za-z0-9]{16,}"), "OpenAI/Anthropic token"),
+    (re.compile(r"\beyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}"), "JWT"),
+]
+SECRET_PATTERNS_WARN = [
+    (re.compile(r"(?i)\b(?:api[_-]?key|secret|token|password|passwd|credential)s?\b[\s:=\"']{1,4}[A-Za-z0-9_\-./+]{16,}"),
+     "标签词后紧跟高熵串（疑似硬编码凭据，请人工确认）"),
+]
+
 errors, warnings, advice = [], [], []
 def err(m):  errors.append(m)
 def warn(m): warnings.append(m)
@@ -262,6 +284,28 @@ def main(root):
             if miss: warn(f"skill manifest 缺字段  {rel(root,sk)}: {', '.join(miss)}")
             if "description" not in keys:
                 warn(f"skill 缺 description  {rel(root,sk)}（agent 靠 description 匹配用户意图来触发；缺它可能识别不到这个 skill）")
+
+    # 9) 密钥/凭据扫描（红线「密钥永不进库」的检测层）。豁免 skills/（含检测器自身与文档示例的 token 形态）。
+    #    privacy: sensitive 的 zone（如 memory/）命中时额外标注——那里泄漏代价最大。
+    sensitive_paths = []
+    if os.path.isfile(zones_f):
+        for chunk in re.split(r"(?m)^\s*-\s+id:", zblock)[1:]:
+            if re.search(r"(?m)^\s*privacy:\s*sensitive\b", chunk):
+                pm = re.search(r"(?m)^\s*path:\s*(\S+)", chunk)
+                if pm: sensitive_paths.append(pm.group(1).strip("'\"").rstrip("/"))
+    in_sensitive = lambda p: any(under(root, p, sp) for sp in sensitive_paths)
+    for m in mds:
+        if under(root, m, "skills"):
+            continue
+        t = texts.get(m) or ""
+        note = "（sensitive zone，泄漏代价最大）" if in_sensitive(m) else ""
+        hit = next(((lab) for pat, lab in SECRET_PATTERNS_ERROR if pat.search(t)), None)
+        if hit:
+            err(f"疑似密钥/凭据  {rel(root,m)}：命中「{hit}」形态{note}——密钥永不进库，请移除并改存引用")
+            continue   # 已报 ERROR，不再对同文件叠加 WARN
+        whit = next(((lab) for pat, lab in SECRET_PATTERNS_WARN if pat.search(t)), None)
+        if whit:
+            warn(f"疑似凭据  {rel(root,m)}：{whit}{note}")
 
     print(f"substrate-doctor: {os.path.basename(root)}  ({len(mds)} md 文件)")
     for tag, items in (("ERROR", errors), ("WARN", warnings), ("ADVICE", advice)):
