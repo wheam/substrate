@@ -20,13 +20,14 @@
 - **Zone（分区）**：仓库里一个有独立 schema + 维护行为 + 访问模式的内容区。每个 zone 在 `governance/zones.md` 顶部的可解析 YAML 块里注册一条，字段契约见 `schemas/zone.schema.yaml`。
 - **Governance（治理）**：`governance/` 目录里那套「怎么维护本仓库」的规则与协议。
 - **CONSTITUTION（宪法）**：少而硬的全局不变量 + 「新增类型」procedure。所有维护 skill 引用的唯一权威；改规则只改这一处。
-- **Admission（准入）**：内容能否进库、以什么形态进的判定规则。核心是**入库四问**与**四种去向**（见下）。
+- **Admission（准入）**：内容能否进库、以什么形态进的判定规则。核心是**入库四问**与**四种入库去向**（见下）。
 - **入库四问**：① 持久？② 属于个人 context？③ 可文件化且适合 git？④ 跨 agent 有共享价值？四问皆是才考虑进库。
-- **四种去向（disposition）**：
+- **四种入库去向（admission outcome）**：对**一条新内容**的准入判定结果（页/条目级）。
   - **Canonical**：进库成事实源。
   - **Reference**：只存引用 + 摘要 + 文字代理（不存本体，如多媒体）。
   - **Local-only**：只留本机，不入库。
   - **Forbidden**：密钥 / 凭据 / 敏感原文 / 大二进制——**永不进库**。
+  > ⚠️ 别和 zone 级的 `disposition` 字段混淆：那是 `zones.md` 里**整个 zone** 的存储取向，只 `{canonical, reference}` 两值（见 `schemas/zone.schema.yaml`）。此处四种是**单条内容**的准入去向，是不同层级、不同取值集的概念。
 - **Zone vs Page**：仅当有独立 schema + 维护行为 + 访问模式才开新顶层 zone；否则是已有 zone 的一页 / 一行。
 - **Graduation（毕业）**：一个 zone 随规模增长而升级存储/索引形态的预声明路径（如行式 canonical → 分片 → SQLite 缓存）。写在 zone 的 `graduation` 字段；doctor 监测阈值、越线只提议；执行由迁移 skill / 人确认后 deliberate 做。**SQLite 永远先做缓存，不当 canonical。**
 

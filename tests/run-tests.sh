@@ -382,6 +382,25 @@ sys.exit(0 if (migs and contiguous and migs[-1][1]==ev) else 1)
 PY
 rc33=$?; [ "$rc33" = 0 ] && ok "migrations 链连续 + max(to)==ENGINE_VERSION($(cat "$ENGINE/ENGINE_VERSION"))" || bad "迁移链断裂或未抵达 ENGINE_VERSION (rc=$rc33)"
 
+echo "== 34) meta: doctor 硬编码的 required 列表与 schema 的 required 一致（防契约漂移）=="
+python3 - "$ENGINE" <<'PY'
+import sys,os,re
+eng=sys.argv[1]
+def sch_req(p):
+    m=re.search(r'(?m)^required:\s*\[(.*?)\]', open(p).read())
+    return set(x.strip() for x in m.group(1).split(",")) if m else set()
+doc=open(os.path.join(eng,"skills/substrate-doctor/doctor.py")).read()
+dm=set(x.strip().strip('"\'') for x in re.search(r'MANIFEST_REQUIRED\s*=\s*\[(.*?)\]',doc).group(1).split(","))
+dz=set(re.findall(r'"([a-z_]+)"', re.search(r'for k in \((.*?)\) if k not in present',doc).group(1))) | {"id"}
+sm=sch_req(os.path.join(eng,"schemas/skill-manifest.schema.yaml"))
+zn=sch_req(os.path.join(eng,"schemas/zone.schema.yaml"))
+ok=(dm==sm) and (dz==zn)
+if not ok:
+    print("manifest: doctor",dm,"!= schema",sm); print("zone: doctor",dz,"!= schema",zn)
+sys.exit(0 if ok else 1)
+PY
+rc34=$?; [ "$rc34" = 0 ] && ok "doctor required 列表 == schema required（无漂移）" || bad "doctor 与 schema 的 required 漂移 (rc=$rc34)"
+
 echo
 echo "==== 结果: $PASS passed, $FAIL failed ===="
 [ "$FAIL" = 0 ]

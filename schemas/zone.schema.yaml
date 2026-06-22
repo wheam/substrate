@@ -10,6 +10,6 @@ properties:
   maintainer_skill:{ type: string, description: "负责维护的 skill 名" }
   readers:         { type: array, items: { type: string }, description: "runtime 名或 'all'（通配）。具体 runtime 由实例的 adapter/fleet 定义，引擎不钉死产品名。⚠️ 治理层声明（人/agent 据此约束写入），引擎脚本不做机器级访问控制强制——是约定不是闸门" }
   writers:         { type: array, items: { type: string }, description: "同 readers（治理层声明，非机器强制）" }
-  disposition:     { enum: [canonical, reference], default: canonical }
+  disposition:     { enum: [canonical, reference], default: canonical, description: "本 zone 的存储取向（zone 级）：canonical=进库成事实源，reference=只存引用+摘要。⚠️ 区别于 admission 的「四种入库去向」（页/条目级、含 local-only/forbidden）——同名不同概念，别把 local-only/forbidden 写进这里" }
   privacy:         { enum: [public, internal, private, sensitive], default: private }
   graduation:      { type: string, description: "毕业触发条件，如 'rows>2000 → 分片 JSONL；需 join → SQLite cache'。doctor 解析此字段做阈值监测，越线只提议不自动迁（见 BUILD-PLAN §8）" }

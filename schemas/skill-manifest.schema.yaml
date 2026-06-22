@@ -5,13 +5,13 @@ required: [name, target_runtimes, risk_level]
 properties:
   name:            { type: string }
   description:     { type: string, description: "★ agent 据此匹配用户意图来触发本 skill——写宽泛的触发词（如「记一下/存进知识库/我的个人仓库/我的笔记」），否则 agent 可能识别不到这个 skill。区别于内部用的 reason。" }
-  source_agent:    { type: string, description: "回流来源 agent；自己写的可省" }
-  created_at:      { type: string, format: date }
+  source_agent:    { type: string, description: "回流来源 agent；自己写的可省。（reserved：已声明，尚无代码消费）" }
+  created_at:      { type: string, format: date, description: "（reserved：已声明，尚无代码消费）" }
   reason:          { type: string, description: "为什么有这个 skill" }
   target_runtimes: { type: array, items: { type: string }, description: "适配哪些 runtime；取值由实例的 adapter 定义，引擎不钉死具体产品名。特殊值 'all' = 通配全部 runtime。⚠️ substrate-sync fail-closed：**未声明此字段的 skill 不会被安装**（要全 runtime 请写 [all]）" }
-  risk_level:      { enum: [low, medium, high], description: "low=仅读写 markdown；其余见下。⚠️ 对自动回流件，admission 不信任自报值，按 capabilities 重新判定后覆盖" }
-  capabilities:    { type: array, items: { type: string }, description: "capability 词表（substrate-intake 守门据此判风险）—— 安全(可自动晋升): read/write/read-markdown/write-markdown/markdown；危险(一律人工 audit): shell/system/network/install/secrets/modify-skills/modify-governance。白名单外的未知词一律按危险处理。" }
-  dependencies:    { type: array, items: { type: string } }
-  related_existing_skills: { type: array, items: { type: string } }
+  risk_level:      { enum: [low, medium, high], description: "⚠️ **人读提示，非 gating 权威**——真正的准入风险由 substrate-intake/gate.py 从 capabilities 计算（凡含 shell/system/network/install/secrets/modify-* 一律 audit），gate 不信任此自报值。故一个 capabilities:[shell] 的 skill 即使自报 medium，gate 仍按 audit 处理；二者不一致是预期的（自报是给人看的粗标，capabilities 才是机器据以判定的）。low=仅读写 markdown。" }
+  capabilities:    { type: array, items: { type: string }, description: "capability 词表（substrate-intake 守门据此判风险，是 gating 的**权威**来源）—— 安全(可自动晋升): read/write/read-markdown/write-markdown/markdown；危险(一律人工 audit): shell/system/network/install/secrets/modify-skills/modify-governance。白名单外的未知词一律按危险处理。" }
+  dependencies:    { type: array, items: { type: string }, description: "声明外部依赖（如网关可选的 MCP SDK）。⚠️ reserved：目前**无代码读它**——'缺失时优雅降级' 须在引入消费者时一并实现，别假设它已生效。" }
+  related_existing_skills: { type: array, items: { type: string }, description: "（reserved：已声明，尚无代码消费）" }
 # 准入规则：risk_level=low 可自动晋升；凡 capabilities 含
 # shell/system/network/install/secrets/modify-skills/modify-governance → 一律人工 audit。
