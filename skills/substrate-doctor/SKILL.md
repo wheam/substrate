@@ -46,6 +46,9 @@ python3 <本 skill 目录>/doctor.py <实例根目录>
 | skill 清单（warn） | `skills/<name>/SKILL.md` 应是合规 manifest（缺 `name/target_runtimes/risk_level` → WARN，见 skill-manifest.schema） |
 | 毕业（advice） | 收藏行数 > `zones.md` `graduation: rows>N` 阈值 |
 | 密钥扫描 | 任何内容页（**豁免 `skills/`**——那里有检测器自身与文档示例的 token）命中**高置信凭据形态**（PEM 私钥 / AWS / GitHub / Google / Slack / Stripe / OpenAI·Anthropic / JWT）→ **ERROR**（红线「密钥永不进库」）；低置信「标签词+高熵串」→ WARN；`privacy: sensitive` zone（如 `memory/`）命中额外标注 |
+| 引擎版本错位（warn） | `skills/.engine-version`（vendored skill 来自的引擎版本）vs `governance/SUBSTRATE_VERSION`（实例 schema 版本）不一致 → WARN（= `--refresh` 了 skill 却没 migrate，或反之）。两标记都在才比 |
+| fleet 契约 | `fleet/README.md` 的 `devices` 块：>1 台 `migration_leader: true` → **ERROR**（至多一台）；≥2 台 device 却无 leader → WARN；device 缺 `role` → WARN |
+| zones 解析（warn） | `governance/zones.md` 有 yaml 块但解析不出任何 zone 条目（`- id:` 形态被改坏）→ WARN，不静默漏检 |
 
 ## 实现约束（改 doctor.py 时必守）
 

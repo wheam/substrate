@@ -34,6 +34,7 @@ python3 <本 skill 目录>/sync.py --src <实例skills目录或引擎skills> \
 - `--target` **省略时自动从 `adapters/<runtime>/adapter.yaml` 推断**（如 claude-code → `~/.claude/skills`；generic-filesystem → `$SUBSTRATE_SKILL_DIR` 或 fallback）；也可显式传。`kind: view-layer` 的 adapter（obsidian）会被拒绝，不装 skill。
 - 多 runtime 变体：skill 目录里有 `SKILL.<runtime>.md` 就用它落地为该机的 `SKILL.md`；否则用默认 `SKILL.md`。
 - 第三方：每条须有 `pin`（无 pin 会标 `SKIP(no-pin!)` 并**拒绝安装**）；按 pin `clone + fetch + checkout FETCH_HEAD`，**任一步失败即视为安装失败**（删除半成品、不写入清单、退出码 1）——绝不静默停在默认分支冒充已 pin。安装成功后**删除 `.git` 冻结为该 commit 快照**（杜绝 stray `git pull` 漂移），并把 commit 记入 `installed-skills.json`。
+- **退役（旧 skill 下架）**：skill 的 manifest 标 `deprecated: true` 或 `superseded_by: <新skill>` → sync **不安装它，并把本机已装的旧副本移除**（解决「旧 skill 被取代后仍残留、与新 skill 撞触发」，如 `personal-wiki` → `substrate-curator`）。做法：把被取代的 skill 留一个只含此墓碑 manifest 的 `SKILL.md`。`--check` 也会把「退役但本机仍残留」报为漂移。
 - 退出码：`0` 全部成功；`1` 有 registry 条目未安装（缺 pin/不可达/检出失败）；`2` 调用错误。
 - 写 `installed-skills.json` 到 `--target`（runtime 的 skill 目录，在实例 repo **之外**，天然 local-only、不入库；仅当 `--target` 被指到实例内某路径时才靠 `.gitignore` 兜底）。
 

@@ -423,6 +423,35 @@ sys.exit(0 if (dirs==listed and mentioned<=dirs) else 1)
 PY
 rc36=$?; [ "$rc36" = 0 ] && ok "INDEX 与磁盘迁移目录一致" || bad "INDEX 与磁盘迁移漂移 (rc=$rc36)"
 
+echo "== 37) sync: deprecated/superseded skill 不装 + 从 target 移除既有（旧 skill 退役）=="
+SR="$(mktemp -d)/skills"; mkdir -p "$SR/keepme" "$SR/oldone"
+printf -- '---\nname: keepme\ntarget_runtimes: [all]\nrisk_level: low\n---\nkeep\n' > "$SR/keepme/SKILL.md"
+printf -- '---\nname: oldone\ntarget_runtimes: [all]\nrisk_level: low\ndeprecated: true\nsuperseded_by: keepme\n---\nold\n' > "$SR/oldone/SKILL.md"
+TGT="$(mktemp -d)/t"; mkdir -p "$TGT/oldone"; printf 'stale\n' > "$TGT/oldone/SKILL.md"   # 模拟之前装过
+OUT37="$(python3 "$SYNC" --src "$SR" --target "$TGT" --runtime claude-code --apply 2>&1)"
+[ -d "$TGT/keepme" ] && ok "未退役 skill 正常安装" || bad "未退役 skill 没装"
+[ -d "$TGT/oldone" ] && bad "已退役 skill 未从 target 移除" || ok "已退役 skill 从 target 移除"
+printf '%s' "$OUT37" | grep -qi "retire\|退役\|superseded" && ok "退役有提示" || bad "退役无提示"
+
+echo "== 38) doctor fleet: >1 migration_leader → ERROR；多机无 leader → WARN =="
+T38="$(mktemp -d)/i"; mkdir -p "$T38"; cp -R "$ENGINE/template/." "$T38/"
+printf '# fleet\n\n```yaml\ndevices:\n  - id: a\n    role: main-dev\n    migration_leader: true\n  - id: b\n    role: headless-dev\n    migration_leader: true\n```\n' > "$T38/fleet/README.md"
+OUT38="$(python3 "$DOC" "$T38" 2>&1)"; rc38=$?
+printf '%s' "$OUT38" | grep -q "migration_leader" && ok ">1 migration_leader 被抓" || bad ">1 leader 未抓"
+[ "$rc38" = 1 ] && ok ">1 leader → rc=1(ERROR)" || bad ">1 leader 未致 rc1 (rc=$rc38)"
+printf '# fleet\n\n```yaml\ndevices:\n  - id: a\n    role: main-dev\n  - id: b\n    role: headless-dev\n```\n' > "$T38/fleet/README.md"
+python3 "$DOC" "$T38" 2>&1 | grep -q "无 migration_leader" && ok "多机无 leader → WARN" || bad "多机无 leader 未 WARN"
+expect_rc 0 "多机无 leader 是 WARN 不致 rc1" python3 "$DOC" "$T38"
+
+echo "== 39) doctor: zones.md 有 yaml 块却解析不出任何 zone → WARN（不静默漏检）=="
+T39="$(mktemp -d)/i"; mkdir -p "$T39"; cp -R "$ENGINE/examples/minimal/." "$T39/"
+python3 - "$T39/governance/zones.md" <<'PY'
+import sys,re; p=sys.argv[1]; t=open(p).read()
+m=re.search(r'```yaml\n(.*?)```',t,re.S); blk=m.group(1).replace('- id:','* id:')   # 破坏 `- id:` 形态 → 解析不出
+open(p,'w').write(t[:m.start(1)]+blk+t[m.end(1):])
+PY
+python3 "$DOC" "$T39" 2>&1 | grep -q "解析不出" && ok "zones 解析不出条目 → WARN" || bad "zones 解析失败被静默"
+
 echo
 echo "==== 结果: $PASS passed, $FAIL failed ===="
 [ "$FAIL" = 0 ]

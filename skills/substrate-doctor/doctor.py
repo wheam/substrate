@@ -217,7 +217,11 @@ def main(root):
         ym = re.search(r"```yaml\n(.*?)```", zt, re.S)
         zblock = ym.group(1) if ym else ""
         seen_ids = set()
-        for chunk in re.split(r"(?m)^\s*-\s+id:", zblock)[1:]:
+        zchunks = re.split(r"(?m)^\s*-\s+id:", zblock)[1:]
+        if ym and zblock.strip() and not zchunks:
+            warn(f"zones 契约: governance/zones.md 有 yaml 块但解析不出任何 zone 条目"
+                 f"（疑似 `- id:` 形态被改坏；doctor 可能在静默漏检本该校验的 zone）  ({rel(root,zones_f)})")
+        for chunk in zchunks:
             zid = chunk.splitlines()[0].strip().strip("'\"")
             present = set(re.findall(r"(?m)^\s*([A-Za-z_][\w-]*)\s*:", chunk)) | {"id"}
             if not zid:
@@ -317,6 +321,27 @@ def main(root):
         if sv and ev and sv != ev:
             warn(f"引擎版本错位  vendored skill 来自引擎 {ev}，但实例 schema 是 {sv}（governance/SUBSTRATE_VERSION）"
                  f"——可能 --refresh 了 skill 却没 migrate（或反之）。跑 init-instance.sh --refresh + substrate-migrate 对齐。")
+
+    # 11) fleet 契约（若有 fleet/README.md 的 devices 块，见其 Agent Packet）：
+    #     全 fleet 至多一台 migration_leader（>1 = ERROR：多 leader 各自迁移会撕裂版本）；
+    #     ≥2 台 device 却无 leader = WARN（跨版本升级没有专责机）；device 缺 role = WARN。
+    fleet_f = os.path.join(root, "fleet", "README.md")
+    if os.path.isfile(fleet_f):
+        ft = read_text(fleet_f) or ""
+        fmm = re.search(r"```yaml\n(.*?)```", ft, re.S)
+        fblock = "\n".join(l for l in (fmm.group(1) if fmm else "").splitlines() if not l.lstrip().startswith("#"))
+        dchunks = re.split(r"(?m)^\s*-\s+id:", fblock)[1:]
+        leaders = 0
+        for ch in dchunks:
+            did = ch.splitlines()[0].strip().strip("'\"")
+            if re.search(r"(?m)^\s*migration_leader:\s*true\b", ch):
+                leaders += 1
+            if not re.search(r"(?m)^\s*role:\s*\S", ch):
+                warn(f"fleet: device '{did or '?'}' 缺 role（建议 main-dev/headless-dev/migration_leader/read-only）  ({rel(root,fleet_f)})")
+        if leaders > 1:
+            err(f"fleet: {leaders} 台标 migration_leader: true，但全 fleet 至多一台（多 leader 会各自迁移、撕裂版本）  ({rel(root,fleet_f)})")
+        elif len(dchunks) >= 2 and leaders == 0:
+            warn(f"fleet: 有 {len(dchunks)} 台 device 但无 migration_leader——跨版本迁移没有专责机（建议指定一台）  ({rel(root,fleet_f)})")
 
     print(f"substrate-doctor: {os.path.basename(root)}  ({len(mds)} md 文件)")
     for tag, items in (("ERROR", errors), ("WARN", warnings), ("ADVICE", advice)):
