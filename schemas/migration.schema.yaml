@@ -19,4 +19,4 @@ properties:
         action: { type: string, description: "做什么（移动/改 schema/拆文件/加 governance 文件…）" }
         verify: { type: string, description: "这步完成后如何验证" }
   preserves:    { type: array, items: { type: string }, description: "必须保持的不变量（计数/链接/zone 注册）" }
-  rollback:     { type: string, description: "失败如何回滚（默认：git reset 到 pre-migrate tag）" }
+  rollback:     { type: string, description: "失败如何回滚。⚠️ 当前唯一机制 = `git reset` 到 `pre-migrate-<from>` tag **整体恢复**（abort-on-failure）；引擎**不提供** vN→vN-1 反向迁移，别假设 apply.py 能反向跑。" }

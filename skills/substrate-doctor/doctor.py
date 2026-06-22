@@ -307,6 +307,17 @@ def main(root):
         if whit:
             warn(f"疑似凭据  {rel(root,m)}：{whit}{note}")
 
+    # 10) 引擎版本错位（execution plane vs data plane）：vendored skill 的引擎版本 vs 实例 schema 版本。
+    #     不一致 = --refresh 了 skill 却没 migrate（或反之），可能按错格式写。WARN（不拦路，提示对齐）。
+    #     仅当两个标记都在才比（examples/minimal、template 等非 init 产物无 .engine-version 标记 → 跳过）。
+    sv = read_text(os.path.join(root, "governance", "SUBSTRATE_VERSION"))
+    ev = read_text(os.path.join(root, "skills", ".engine-version"))
+    if sv is not None and ev is not None:
+        sv, ev = sv.strip(), ev.strip()
+        if sv and ev and sv != ev:
+            warn(f"引擎版本错位  vendored skill 来自引擎 {ev}，但实例 schema 是 {sv}（governance/SUBSTRATE_VERSION）"
+                 f"——可能 --refresh 了 skill 却没 migrate（或反之）。跑 init-instance.sh --refresh + substrate-migrate 对齐。")
+
     print(f"substrate-doctor: {os.path.basename(root)}  ({len(mds)} md 文件)")
     for tag, items in (("ERROR", errors), ("WARN", warnings), ("ADVICE", advice)):
         for it in items: print(f"  [{tag}] {it}")

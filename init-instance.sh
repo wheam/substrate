@@ -23,6 +23,10 @@ vendor_skills() {   # $1 = 实例 skills/ 目录
     cp -R "$d" "$dest_skills/$name"
     rm -rf "$dest_skills/$name/__pycache__"   # 别把字节码缓存带进实例
   done
+  # 标记这批 vendored skill 来自哪个引擎版本（execution plane）。
+  # doctor 用它 vs governance/SUBSTRATE_VERSION（data plane）比对，抓「--refresh 了 skill 却没 migrate」
+  # （或反之）的版本错位。--refresh 重 vendor 时一并更新；migrate 成功后会 bump SUBSTRATE_VERSION，二者复归一致。
+  printf '%s\n' "$(cat "$ENGINE/ENGINE_VERSION")" > "$dest_skills/.engine-version"
 }
 
 vendor_adapters() {   # $1 = 实例根目录

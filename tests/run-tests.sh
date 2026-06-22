@@ -198,6 +198,7 @@ echo "== 19) 改进A: init-instance.sh 脚手架自包含实例（vendor 维护 
 INST="$(mktemp -d)/myi"
 sh "$ENGINE/init-instance.sh" "$INST" testname >/dev/null 2>&1
 { [ -f "$INST/skills/substrate-doctor/doctor.py" ] && [ -f "$INST/skills/substrate-sync/sync.py" ]; } && ok "维护 skill 已 vendor 进实例" || bad "维护 skill 未 vendor"
+[ "$(cat "$INST/skills/.engine-version" 2>/dev/null)" = "$(cat "$ENGINE/ENGINE_VERSION")" ] && ok "init 写 skills/.engine-version 标记 == ENGINE_VERSION" || bad "init 未写引擎版本标记"
 grep -q '^# testname' "$INST/README.md" && ok "{{INSTANCE_NAME}} 已替换" || bad "实例名占位未替换"
 find "$INST" -name __pycache__ | grep -q . && bad "vendor 带进了 __pycache__" || ok "未带入 __pycache__"
 expect_rc 0 "自包含实例 doctor 0 error" python3 "$DOC" "$INST"
@@ -400,6 +401,27 @@ if not ok:
 sys.exit(0 if ok else 1)
 PY
 rc34=$?; [ "$rc34" = 0 ] && ok "doctor required 列表 == schema required（无漂移）" || bad "doctor 与 schema 的 required 漂移 (rc=$rc34)"
+
+echo "== 35) doctor: vendored skill 引擎版本 vs 实例 schema 版本错位 → WARN（不拦路）=="
+T35="$(mktemp -d)/i"; mkdir -p "$T35"; cp -R "$ENGINE/examples/minimal/." "$T35/"   # SUBSTRATE_VERSION=0.2.0
+printf '0.3.0\n' > "$T35/skills/.engine-version"   # 模拟 --refresh 到 0.3.0 但没 migrate
+OUT35="$(python3 "$DOC" "$T35" 2>&1)"; rc35=$?
+printf '%s' "$OUT35" | grep -q "引擎版本错位" && ok "版本错位 → WARN" || bad "版本错位未 WARN"
+[ "$rc35" = 0 ] && ok "版本错位是 WARN 不改退出码(rc=0)" || bad "版本错位误报为 ERROR (rc=$rc35)"
+printf '0.2.0\n' > "$T35/skills/.engine-version"   # 与 SUBSTRATE_VERSION 对齐
+python3 "$DOC" "$T35" 2>&1 | grep -q "引擎版本错位" && bad "版本对齐仍误报错位" || ok "版本对齐不误报"
+
+echo "== 36) meta: migrations/INDEX.md 与磁盘上的迁移目录一一对应（防 INDEX 漂移）=="
+python3 - "$ENGINE" <<'PY'
+import sys,os,re,glob
+eng=sys.argv[1]
+dirs={os.path.basename(os.path.dirname(p)) for p in glob.glob(eng+"/migrations/*/migration.yaml")}
+idx=open(os.path.join(eng,"migrations/INDEX.md")).read()
+listed={d for d in dirs if d in idx}                       # 每个磁盘迁移 id 都出现在 INDEX
+mentioned=set(re.findall(r'\b(\d{4}-[a-z0-9-]+)\b', idx))  # INDEX 提到的 id 形态串都是真实目录
+sys.exit(0 if (dirs==listed and mentioned<=dirs) else 1)
+PY
+rc36=$?; [ "$rc36" = 0 ] && ok "INDEX 与磁盘迁移目录一致" || bad "INDEX 与磁盘迁移漂移 (rc=$rc36)"
 
 echo
 echo "==== 结果: $PASS passed, $FAIL failed ===="
