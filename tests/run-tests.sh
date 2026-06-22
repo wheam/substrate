@@ -341,6 +341,47 @@ printf -- '---\ntitle: L\ncreated: 2026-01-01\nupdated: 2026-01-01\ntype: note\n
 OUT30="$(python3 "$DOC" "$T30" 2>&1)"
 printf '%s' "$OUT30" | grep "疑似密钥" | grep -q "sensitive" && ok "sensitive zone 内密钥 ERROR 额外标注其敏感" || bad "sensitive zone 未额外标注"
 
+echo "== 31) collections upsert: 按 id 幂等（同 id 两次→1 行；新 id→累加；改既有不增行）=="
+CSV="$(mktemp -d)/c/data.csv"
+python3 "$COLL" upsert --csv "$CSV" --field id=ripgrep --field name=ripgrep --apply >/dev/null 2>&1
+python3 "$COLL" upsert --csv "$CSV" --field id=ripgrep --field name=ripgrep --apply >/dev/null 2>&1
+n="$(python3 "$COLL" count --csv "$CSV")"; [ "$n" = 1 ] && ok "同 id upsert 两次仍 1 行（幂等去重）" || bad "upsert 非幂等 (got $n)"
+python3 "$COLL" upsert --csv "$CSV" --field id=fd --field name=fd --apply >/dev/null 2>&1
+n2="$(python3 "$COLL" count --csv "$CSV")"; [ "$n2" = 2 ] && ok "新 id upsert → 累加到 2 行" || bad "新 id 未累加 (got $n2)"
+python3 "$COLL" upsert --csv "$CSV" --field id=fd --field category=cli --apply >/dev/null 2>&1
+n3="$(python3 "$COLL" count --csv "$CSV")"; [ "$n3" = 2 ] && ok "改既有 id（加字段）不新增行" || bad "改行误增 (got $n3)"
+
+echo "== 32) doctor 正向触发: count-drift / orphan / 断链(basename) / frontmatter 缺失 都真的报 ERROR =="
+T32="$(mktemp -d)/i"; mkdir -p "$T32"; cp -R "$ENGINE/examples/minimal/." "$T32/"
+python3 - "$T32/collections/tools/tools.md" <<'PY'
+import sys; p=sys.argv[1]; t=open(p).read(); open(p,'w').write(t.replace("**5** 条","**99** 条"))
+PY
+printf -- '---\ntitle: Lonely\ncreated: 2026-01-01\nupdated: 2026-01-01\ntype: concept\n---\n# Lonely\n[[git]] [[markdown]]\n' > "$T32/knowledge/lonely.md"   # 无入链 → 孤儿
+printf '\n坏链 [[no-such-basename-xyz]]\n' >> "$T32/knowledge/git.md"                                                            # basename 断链
+printf '# NoFM\n[[git]] [[markdown]]\n' > "$T32/knowledge/nofm.md"                                                              # 无 frontmatter
+OUT32="$(python3 "$DOC" "$T32" 2>&1)"; rc32=$?
+printf '%s' "$OUT32" | grep -q "计数漂移"                  && ok "count-drift 正向触发" || bad "count-drift 未触发"
+printf '%s' "$OUT32" | grep -q "孤儿.*lonely"              && ok "orphan 正向触发"      || bad "orphan 未触发"
+printf '%s' "$OUT32" | grep -q "断链.*no-such-basename-xyz" && ok "basename 断链正向触发" || bad "basename 断链未触发"
+printf '%s' "$OUT32" | grep -q "frontmatter 缺失.*nofm"     && ok "frontmatter 缺失正向触发" || bad "frontmatter 缺失未触发"
+[ "$rc32" = 1 ] && ok "有 ERROR → rc=1" || bad "有 ERROR 仍非 1 (rc=$rc32)"
+
+echo "== 33) meta: 真实 migrations/ 链连续且终止于 ENGINE_VERSION（防 bump 版本却不加迁移）=="
+python3 - "$ENGINE" <<'PY'
+import sys,os,re,glob
+eng=sys.argv[1]; ev=open(os.path.join(eng,"ENGINE_VERSION")).read().strip()
+migs=[]
+for mf in sorted(glob.glob(eng+"/migrations/*/migration.yaml")):
+    t=open(mf).read()
+    migs.append((re.search(r'from_version:\s*"?([\d.]+)',t).group(1),
+                 re.search(r'to_version:\s*"?([\d.]+)',t).group(1)))
+key=lambda v: tuple(int(x) for x in v.split("."))
+migs.sort(key=lambda m: key(m[0]))
+contiguous=all(migs[i][1]==migs[i+1][0] for i in range(len(migs)-1))
+sys.exit(0 if (migs and contiguous and migs[-1][1]==ev) else 1)
+PY
+rc33=$?; [ "$rc33" = 0 ] && ok "migrations 链连续 + max(to)==ENGINE_VERSION($(cat "$ENGINE/ENGINE_VERSION"))" || bad "迁移链断裂或未抵达 ENGINE_VERSION (rc=$rc33)"
+
 echo
 echo "==== 结果: $PASS passed, $FAIL failed ===="
 [ "$FAIL" = 0 ]
