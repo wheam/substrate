@@ -143,6 +143,25 @@ MCP **两者都不是**：它既不往某 runtime 装 skill，也不是只读视
 
 **结论**：要快 / 离线 / 全权且机器可信 → 倾向 A；要省事接入异构或受限设备、数据不落地到每台、集中审计与强制治理 → 倾向 B。二者可**混合**（§2.5）：受限 / 边缘设备走 B，主力机留 A。
 
+### 2.8 写回与回流（记忆 / skill）经 MCP
+
+远端 agent 不只是读，还要把**新学到的、关于主人的记忆**和**自己总结的 skill** 写回实例。两类写回都能走 MCP，且**准入闸从"装在 agent 里"搬到"网关上强制"**——这是相对 skill-runtime 的增益。
+
+- **记忆写回**：暴露 `substrate_remember`（或经 `substrate_write_page` 落 `memory/` 区）。**判断**（共享/本地/Forbidden 边界、去重、contested）由 client 在 `instructions` 引导下做；**机械写 + Forbidden 复校 + doctor + push** 由网关做。主动性同 §2.3——靠工具 `description` + `instructions` 触发。
+- **skill 回流**：暴露一个"提交 skill"工具，把 agent 总结的 skill **存进 `skills/_incoming/` 隔离区**，并在**服务端跑 `gate.py` 风险分级**：只读写 markdown 的可自动晋升，凡含 shell/network/secrets/modify-* 一律留隔离区转人工 audit。**远端 agent 绕不过准入**——比"规则装在 agent 身上靠自觉"更稳。
+- **能力边界（要诚实标注）**：把 skill **捕获/留存进实例**是自动的；让一个刚存进来的 skill **被 MCP-only 的 client 即时用上**是另一步有意为之的动作（见 §2.9）。
+
+### 2.9 agent 怎么获得 skill（两条分发路径，不需新发明）
+
+"装 skill"对两类 agent 是两件事，现有零件已覆盖，**不必为此造统一机制**：
+
+- **会装 skill 的 runtime** → 既有 `substrate-sync`：读实例 `skills/` + `_registry.md` 装进该 runtime 的 skill 目录；新 skill 从 `_incoming/` 晋升后，**下次 sync 自动带上**。
+- **MCP-only 的 agent** → 不"装"，按三档获得能力：
+  1. **纯做法类 skill（markdown、只用读写）**：client 直接用 `substrate_read` **读那篇 `SKILL.md` 照做** + 用既有原语工具执行——**零安装**（多数参考 skill 属此类）；
+  2. **需确定性脚本的 skill**：把该脚本**有意**加进网关 `tools_exposed` 白名单，包成一个工具；
+  3. 实在要即时能力 → 退回第 1 类的 skill-runtime 安装（若该 agent 支持）。
+- **红线：绝不自动把任意 skill 变成可调工具**。那等于让远端 agent 给自己开可执行能力、捅穿 `_incoming` 隔离 + 风险分级。"得手动进白名单"不是缺陷，正是准入的延续。
+
 ---
 
 ## 3. 工程设计
@@ -243,6 +262,22 @@ local_state:
 - **token 鉴权与网络层无关，始终要配**（纵深防御）：公网形态下它是唯一防线，私网形态下它是第二层——某台设备失陷不应自动拿到无 scope 权限。
 - **信任边界**：主机持有实例工作副本 + 写 token；缓解靠"git remote 为持久真相源 + scoped token + 即时吊销"。是否接受数据驻于某主机，是部署者按自身信任模型的取舍，**不属引擎机制**。
 
+### 4.2 引擎升级与网关（版本一致性）
+
+引擎发新版时，网关形态下**有三样东西被更新**（容易只想到第一样）：
+
+1. **实例数据 / 治理**（schema、zone 布局变） → `substrate-migrate` 迁移；
+2. **实例里 vendored 的维护 skill** → `init-instance.sh --refresh` 刷新；
+3. **网关服务本身**（`skills/substrate-mcp/` 是引擎代码跑成的服务） → **用新引擎版本重新部署**。
+
+**版本错位是主风险**：实例已迁到新 schema，网关却跑旧引擎代码（或反之），可能按错格式写、污染刚迁好的库。故须保证**网关引擎版本 ≡ 实例 `SUBSTRATE_VERSION`**。
+
+- **网关启动版本闸门（护栏）**：网关在启动 / 接入时校验"自身构建所基于的引擎版本" vs 实例 `SUBSTRATE_VERSION`；**不一致 → fail-closed 转只读**，报"实例待迁移 / 网关待重部署"，**绝不在错位下写**。这是把 `substrate-migrate` 的检测逻辑防御性复用到网关。
+- **迁移与网关解耦**：`migrations/` 不 vendor、迁移高风险，**不该让临时 / 易回收的网关容器裸扛**。指定一个稳定的 `migration_leader`（带引擎仓库 + 实例 clone 的受控环境）执行迁移并 push；网关只是 runtime 消费者。
+- **安全升级顺序**：① 网关转只读 / 下线（别让写撞上迁移）→ ② leader 上 `--refresh` + `substrate-migrate`（`pre-migrate` tag → 应用 → doctor 前后校验 → 成功 commit + bump version + push；失败 `git reset` 回 tag）→ ③ 网关**重部署、钉到新引擎版本**（无状态设计：开机重 clone 已迁好的实例）→ ④ 恢复；其它 client 凭版本闸门跳过、不重复迁。
+- **钉死引擎 ref**：网关部署所基于的引擎 ref 要钉死，**不每次开机自动拉 latest**（避免与实例版本悄悄错位）；升级是有意为之的一步。
+- **不丢数据保证照旧**：`pre-migrate` tag 推到 git remote（不在临时容器里，容器回收也能回滚）+ doctor 前后不变量 + 失败 reset + 模糊内容进隔离区。
+
 ---
 
 ## 5. 与现有契约的自洽核对
@@ -259,9 +294,9 @@ local_state:
 | 里程碑 | 内容 | 验收 |
 |---|---|---|
 | **M1** | `kind: gateway` 接口 + `adapters/mcp/` + `sync.py` 跳过 gateway + **stdio 最小 server**（`search` / `read` / `doctor` / `collection_add` 四工具）+ 测试 | 一个 MCP client 经 stdio 连上，能搜/读/体检/加一行 collection，doctor 0 error |
-| **M2** | `substrate_write_page`（知识 / 记忆受控写）+ resource `substrate://governance` + `instructions` 注入 + Forbidden 复校 | 远端 agent 不装 skill，仅凭网关写出一篇合规知识页（≥2 wikilink + 索引更新 + doctor 通过） |
+| **M2** | `substrate_write_page`（知识 / 记忆受控写，§2.8）+ skill 回流（submit 进 `_incoming`、`gate.py` 服务端分级，§2.8）+ resource `substrate://governance` + `instructions` 注入 + Forbidden 复校 | 远端 agent 不装 skill，仅凭网关写出一篇合规知识页（≥2 wikilink + 索引更新 + doctor 通过）；提交的高风险 skill 滞留 `_incoming` 待审 |
 | **M3** | 远程传输（streamable HTTP）+ token 鉴权 + read/write scope + 无状态主机设计（见 §4）+ 部署文档（暴露形态见 §4.1、`fleet` 角色） | 两台机器远程连同一 `<mcp-host>`，read-only token 写被拒、read-write token 写成功 |
-| **M4** | 审计日志 + 并发串行化 + doctor cron + 混合部署指南 | 并发写不撕裂；审计可追溯；主机挂后主力机离线可用 |
+| **M4** | 审计日志 + 并发串行化 + doctor cron + **网关启动版本闸门 + 引擎升级流程（§4.2）** + 混合部署指南 | 并发写不撕裂；审计可追溯；引擎/实例版本错位时网关 fail-closed 只读；主机挂后主力机离线可用 |
 
 ---
 
