@@ -462,6 +462,65 @@ open(p,'w').write(t[:m.start(1)]+blk+t[m.end(1):])
 PY
 python3 "$DOC" "$T39" 2>&1 | grep -q "解析不出" && ok "zones 解析不出条目 → WARN" || bad "zones 解析失败被静默"
 
+echo "== 40) substrate-runtime-context: 小抄生成（各区 Agent Packet + about-owner + 路由表 + 体积护栏）=="
+RCX="$ENGINE/skills/substrate-runtime-context/render-context.py"
+expect_rc 2 "无效路径 → rc=2" python3 "$RCX" /no/such/dir
+T40="$(mktemp -d)/inst"; mkdir -p "$T40"; cp -R "$ENGINE/template/." "$T40/"
+mkdir -p "$T40/skills/substrate-todo"; cp "$ENGINE/skills/substrate-todo/SKILL.md" "$T40/skills/substrate-todo/SKILL.md"
+printf -- '---\ntitle: 饮食偏好\ntype: memory\nowner: <主人>\ncreated: 2026-01-01\nupdated: 2026-01-01\n---\n主人吃素，咖啡不加糖。\n' > "$T40/memory/about-owner/prefs.md"
+OUT40="$(python3 "$RCX" "$T40" 2>/dev/null)"
+printf '%s' "$OUT40" | grep -q "substrate-memory" && ok "纳入各区 Agent Packet" || bad "缺 Agent Packet"
+printf '%s' "$OUT40" | grep -q "主人吃素" && ok "纳入 about-owner 记忆正文" || bad "缺 about-owner 正文"
+printf '%s' "$OUT40" | grep -q "type: memory" && bad "记忆 frontmatter 泄漏" || ok "记忆 frontmatter 已剥离"
+printf '%s' "$OUT40" | grep -q "加个待办" && ok "路由表从 skill description 派生" || bad "缺路由表触发词"
+printf '%s' "$OUT40" | grep -q "先提议后写\|绝不擅自写库" && ok "房规（主动捕获先提议）已含" || bad "缺房规"
+# about-owner 的 README 索引页不当作记忆正文混入
+printf '%s' "$OUT40" | grep -q "命名约定（引擎中立）" && bad "about-owner/README 被误当记忆" || ok "about-owner/README 不混入记忆段"
+# 体积护栏：超上限只 stderr 告警、stdout 仍出内容、rc=0
+{ printf -- '---\ntitle: big\ntype: memory\n---\n'; python3 -c "print('主人偏好 '*4000)"; } > "$T40/memory/about-owner/big.md"
+ERR40="$(python3 "$RCX" "$T40" 2>&1 >/dev/null)"; rc40=$?
+printf '%s' "$ERR40" | grep -q "体积" && ok "超体积上限 → stderr 告警" || bad "超体积无告警"
+[ "$rc40" = 0 ] && ok "超体积仍 rc=0（只告警不失败）" || bad "超体积误致非0 (rc=$rc40)"
+python3 "$RCX" "$T40" 2>/dev/null | grep -q "主人偏好" && ok "超体积 stdout 不截断" || bad "超体积 stdout 被破坏"
+# 缺区容忍：examples/minimal 没有 todo/memory 区也不崩、不报错
+expect_rc 0 "缺 todo/memory 区也正常生成（examples/minimal）" python3 "$RCX" "$ENGINE/examples/minimal"
+
+echo "== 41) doctor: about-owner 体积超阈值 → WARN（防常驻小抄膨胀，不改退出码）=="
+T41="$(mktemp -d)/inst"; mkdir -p "$T41"; cp -R "$ENGINE/template/." "$T41/"
+{ printf -- '---\ntitle: big\ntype: memory\nowner: x\ncreated: 2026-01-01\nupdated: 2026-01-01\n---\n见 [[prefs]] 与 [[owner]]。\n'; python3 -c "print('主人偏好细节 '*1500)"; } > "$T41/memory/about-owner/big.md"
+printf -- '---\ntitle: p\ntype: memory\nowner: x\ncreated: 2026-01-01\nupdated: 2026-01-01\n---\n小事实。见 [[big]] 与 [[owner]]。\n' > "$T41/memory/about-owner/prefs.md"
+printf -- '---\ntitle: o\ntype: memory\nowner: x\ncreated: 2026-01-01\nupdated: 2026-01-01\n---\n主人。见 [[big]] 与 [[prefs]]。\n' > "$T41/memory/about-owner/owner.md"
+printf '\n- [[big]]\n- [[prefs]]\n- [[owner]]\n' >> "$T41/memory/about-owner/README.md"
+python3 "$DOC" "$T41" 2>&1 | grep -q "about-owner 体积" && ok "about-owner 膨胀 → WARN" || bad "about-owner 膨胀未 WARN"
+expect_rc 0 "about-owner 体积是 WARN 不致 rc1" python3 "$DOC" "$T41"
+# 小 about-owner 不误报
+python3 "$DOC" "$ENGINE/template" 2>&1 | grep -q "about-owner 体积" && bad "小 about-owner 误报体积" || ok "小 about-owner 不误报"
+
+echo "== 42) wire-context: runtime 中立——按 adapter 的 runtime_context 决定开/关，核心不认 runtime 名 =="
+WC="$ENGINE/skills/substrate-runtime-context/wire-context.py"
+T42="$(mktemp -d)/inst"; mkdir -p "$T42"; cp -R "$ENGINE/template/." "$T42/"
+printf -- '---\ntitle: 偏好\ntype: memory\nowner: x\ncreated: 2026-01-01\nupdated: 2026-01-01\n---\n主人吃素。\n' > "$T42/memory/about-owner/prefs.md"
+DG="$(mktemp -d)/ctx.md"
+# hermes adapter default_on:true → ON，--apply 把小抄刷到 env override 指定的落地文件（不碰真 ~/.hermes）
+OUT42="$(HERMES_SUBSTRATE_CONTEXT="$DG" python3 "$WC" --instance "$T42" --runtime hermes --adapters "$ENGINE/adapters" --apply 2>/dev/null)"; rc42=$?
+[ "$rc42" = 0 ] && ok "hermes(default_on) --apply rc=0" || bad "hermes --apply rc=$rc42"
+[ -f "$DG" ] && grep -q "主人吃素" "$DG" && ok "小抄按 adapter digest_file 落地（含记忆）" || bad "小抄未落地"
+# dry-run（无 --apply）不得写文件
+DG2="$(mktemp -d)/ctx2.md"
+HERMES_SUBSTRATE_CONTEXT="$DG2" python3 "$WC" --instance "$T42" --runtime hermes --adapters "$ENGINE/adapters" >/dev/null 2>&1
+[ -f "$DG2" ] && bad "dry-run 误写文件" || ok "dry-run 不写文件"
+# 无 runtime_context 的 runtime（claude-code）→ 默认关、不写、rc=0（cc/codex 天然落到这里）
+expect_rc 0 "claude-code 无 runtime_context → 默认关 rc=0" python3 "$WC" --instance "$T42" --runtime claude-code --adapters "$ENGINE/adapters"
+python3 "$WC" --instance "$T42" --runtime claude-code --adapters "$ENGINE/adapters" 2>&1 | grep -q "默认关" && ok "claude-code 报「默认关」" || bad "claude-code 未报默认关"
+# generic-filesystem 兜底 default_on:false → 也默认关
+python3 "$WC" --instance "$T42" --runtime generic-filesystem --adapters "$ENGINE/adapters" 2>&1 | grep -q "默认关" && ok "generic-filesystem 兜底默认关" || bad "generic-filesystem 未默认关"
+# 不存在的 runtime → 优雅关，rc=0
+expect_rc 0 "未知 runtime → 优雅关 rc=0" python3 "$WC" --instance "$T42" --runtime nosuch --adapters "$ENGINE/adapters"
+# 缺参 → rc=2
+expect_rc 2 "缺 --runtime → rc=2" python3 "$WC" --instance "$T42" --adapters "$ENGINE/adapters"
+# 输出无 DeprecationWarning（python3.13+ 干净）
+HERMES_SUBSTRATE_CONTEXT="$(mktemp -d)/c.md" python3 "$WC" --instance "$T42" --runtime hermes --adapters "$ENGINE/adapters" --apply 2>&1 | grep -qi "DeprecationWarning" && bad "wire-context 有 DeprecationWarning" || ok "wire-context 输出干净（无 Deprecation 噪音）"
+
 echo
 echo "==== 结果: $PASS passed, $FAIL failed, $SKIP skipped ===="
 [ "$FAIL" = 0 ]

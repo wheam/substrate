@@ -28,7 +28,8 @@ reason: 新 agent 自举 + 新机首次接入（git、调用 sync）
 4. **配本地身份**：按本机 runtime，确定 git 身份与路径——由对应 `adapter` 决定。本地清单/缓存/身份**不入库**。
 5. **登记本机**：在 `fleet/` 加本机一条（id/role/runtimes）。skill 已在第 2 步按 `target_runtimes` 选择性安装；角色维度由你/管家决定喂哪些 skill。
 6. **就绪自检**：能 pull/push？读过宪法+zones？适用 skill 已装？要写的 zone 的 canonical 与索引位置清楚？
-7. **写前**：要动某 zone 前，先读该 zone README 顶部 **Agent Packet**。
+7. **（可选，对话型助理推荐）常驻接入**：给本 runtime 接 `substrate-runtime-context`——每个 session 开工自动灌「关于主人记忆 + 各区速览 + 意图→skill 路由表 + 房规」，让它开工即懂库、不用每次喊。**默认只给 Hermes/openclaw 等对话助理接；claude-code/codex 默认不接**。接法见对应 adapter（如 `adapters/hermes/README.md`）。
+8. **写前**：要动某 zone 前，先读该 zone README 顶部 **Agent Packet**。
 
 ## 脚手架一个全新实例（init）
 

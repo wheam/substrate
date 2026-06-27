@@ -8,6 +8,19 @@
 - 本机角色与可用 runtime 怎么探测；
 - 本地安装清单存哪。
 
+可选回答（**常驻上下文注入**，`substrate-runtime-context` 消费）：
+- **`runtime_context:`** —— 声明本 runtime 要不要、以及怎么接「常驻小抄」注入。这是引擎做到
+  **「越自动越好、又不绑死任何 agent」** 的关键：生成器（`render-context.py`）完全中立，**唯一**
+  因 runtime 而异的「怎么把小抄喂给这个 agent」声明在这里，`wire-context.py` 通用地照着接、核心不认 runtime 名。
+  | 字段 | 含义 |
+  |---|---|
+  | `default_on` | `true`=该 runtime 默认接注入（对话型助理如 hermes/openclaw）；缺省/`false`=默认关（写代码型如 claude-code/codex 不声明即天然落到关） |
+  | `digest_file` | 小抄落地的本地文件路径（不入库；`~`/`${ENV}` 可展开） |
+  | `digest_file_env_override` | 覆盖上面路径的环境变量名（测试/多实例用） |
+  | `inject_via` | 一次性接线指令：怎么让该 runtime 启动时加载 `digest_file`（注入点，因 runtime 而异） |
+  | `refresh` | 每会话怎么刷新小抄（runtime 自带 session-start hook，或 launchd/cron） |
+  > 给一个**新 agent**（openclaw…）上这套 = 往它的 adapter 加一个 `runtime_context` 块 + 查一次它的注入点；**核心代码零改动**。没有专属 adapter 的 agent 走 `generic-filesystem` 的 `runtime_context` 兜底。
+
 每个 adapter 是**声明式**的 `adapter.yaml` + `README.md`（不是代码）。`kind` 分两类：
 
 | adapter | kind | 目标 |

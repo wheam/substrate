@@ -35,6 +35,18 @@ local_manifest:
   committed: false           # local-only：execution-plane 的本地状态，永不入库
   gitignored_by_template: true  # template/.gitignore 已含 installed-skills.json
 
+# ── 常驻上下文注入（substrate-runtime-context 兜底）────────
+# 任何「能读写文件夹 + 能被告知加载某文件进上下文」的 agent 的最小注入契约。
+# 默认【关】：兜底不替不知名 agent 擅自开；要用就把 default_on 改 true、把 digest_file 指到
+# 你的 agent 会加载的文件，再跑 wire-context.py。注入点（怎么让 agent 读该文件）由你的 agent 决定。
+runtime_context:
+  default_on: false                          # 兜底默认关；显式开启
+  generator: "python3 <instance>/skills/substrate-runtime-context/render-context.py <instance>"
+  digest_file: "${SUBSTRATE_CONTEXT_FILE}"   # 占位：小抄落地路径，由调用方提供
+  digest_file_env_override: "SUBSTRATE_CONTEXT_FILE"
+  inject_via: "把该文件加载进你的 agent 的上下文/系统提示（机制因 agent 而异）"
+  refresh: "你的 session-start 机制 或 launchd/cron 定时跑 wire-context.py --apply"
+
 notes: >
   这是接入任意「能读写文件夹」的 agent 的最小契约：给一个目录、跑 sync、读本地清单即可。
   当某个真实 runtime（claude-code / codex / hermes …）逼出更具体的路径约定时，照此文件克隆一份专属 adapter，
