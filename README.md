@@ -63,6 +63,10 @@ Please do it for me, and STOP and tell me if any step fails (don't silently cont
    Then VERIFY at least one skill was actually installed. If 0 were installed, the
    --runtime value is wrong for your agent — stop and ask me.
 6. Run substrate-doctor on the instance; if it reports any ERROR, stop and show me.
+6b. (Only if YOUR runtime is a conversational assistant like Hermes — skip for code-focused
+   runtimes such as Claude Code / Codex) Wire standing-context injection so you auto-load my
+   memory + repo map + an intent→skill router every session, instead of waiting to be asked:
+   see adapters/<your-runtime>/README.md (the `substrate-runtime-context` section).
 7. Create a PRIVATE GitHub repo, add it as the remote, and `git push -u origin main`.
    VERIFY the push actually succeeded — a local-only instance silently disables all
    multi-machine sync. If you can't push, stop and tell me exactly what to fix (auth).

@@ -29,6 +29,17 @@ local_manifest:
   committed: false
   gitignored_by_template: true   # template/.gitignore 已含 installed-skills.json
 
+# ── 常驻上下文注入（substrate-runtime-context）────────────
+# 让 Hermes 开工自动加载库摘要（关于主人记忆 + 各区速览 + 路由表 + 房规）。
+# 注入点为占位约定，待真实 Hermes 机 round-trip 验证后固化（见 README「常驻上下文注入」）。
+runtime_context:
+  default_on: true                                  # 对话型助理默认接；cc/codex 默认关
+  generator: "python3 <instance>/skills/substrate-runtime-context/render-context.py <instance>"
+  digest_file: "~/.hermes/substrate-context.md"     # 生成器输出落地（本地，不入库）
+  digest_file_env_override: "HERMES_SUBSTRATE_CONTEXT"
+  inject_via: "config.yaml 的 system prompt 加载该文件"   # ← 占位，待真机确认确切字段
+  refresh: "session-start hook（路 A，Hermes 自刷）或 launchd/cron（路 B，外部刷）"
+
 notes: >
   最小声明：路径为占位约定，待在真实 Hermes 机上验证后固化。
   Substrate 的目标之一就是「不绑死 Hermes」——本 adapter 让 Hermes 与 claude-code / codex 平级接入。

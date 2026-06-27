@@ -14,6 +14,10 @@
 import sys, os, re, glob, csv
 
 REQUIRED_FRONTMATTER = ["title", "created", "updated", "type"]
+
+# about-owner 体积护栏：约 8000 字符以上 → WARN「常驻小抄会偏大、该精简」。
+# 与 substrate-runtime-context 的小抄上限（默认 12000）留出余量给各区 Agent Packet + 路由表 + 房规。
+ABOUT_OWNER_MAX_CHARS = 8000
 MANIFEST_REQUIRED = ["name", "target_runtimes", "risk_level"]   # 见 schemas/skill-manifest.schema.yaml
 
 # 密钥/凭据扫描（红线「Forbidden：密钥永不进库」的检测层）。
@@ -342,6 +346,16 @@ def main(root):
             err(f"fleet: {leaders} 台标 migration_leader: true，但全 fleet 至多一台（多 leader 会各自迁移、撕裂版本）  ({rel(root,fleet_f)})")
         elif len(dchunks) >= 2 and leaders == 0:
             warn(f"fleet: 有 {len(dchunks)} 台 device 但无 migration_leader——跨版本迁移没有专责机（建议指定一台）  ({rel(root,fleet_f)})")
+
+    # 12) about-owner 体积护栏：跨 agent 共享记忆若膨胀，会让 substrate-runtime-context 的常驻小抄偏大
+    #     （每个 session 都灌）。统计 memory/about-owner/*.md（除 README 索引页）正文总字符；超阈值 → WARN。
+    ao_total = 0
+    for m in mds:
+        if under(root, m, os.path.join("memory", "about-owner")) and os.path.basename(m).lower() != "readme.md":
+            ao_total += len(texts.get(m) or "")
+    if ao_total > ABOUT_OWNER_MAX_CHARS:
+        warn(f"about-owner 体积偏大  memory/about-owner 共 {ao_total} 字符（>{ABOUT_OWNER_MAX_CHARS}）"
+             f"——常驻小抄（substrate-runtime-context）每个 session 都灌它，建议精简或拆到 knowledge/")
 
     print(f"substrate-doctor: {os.path.basename(root)}  ({len(mds)} md 文件)")
     for tag, items in (("ERROR", errors), ("WARN", warnings), ("ADVICE", advice)):
