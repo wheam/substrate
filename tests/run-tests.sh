@@ -496,6 +496,31 @@ expect_rc 0 "about-owner 体积是 WARN 不致 rc1" python3 "$DOC" "$T41"
 # 小 about-owner 不误报
 python3 "$DOC" "$ENGINE/template" 2>&1 | grep -q "about-owner 体积" && bad "小 about-owner 误报体积" || ok "小 about-owner 不误报"
 
+echo "== 42) wire-context: runtime 中立——按 adapter 的 runtime_context 决定开/关，核心不认 runtime 名 =="
+WC="$ENGINE/skills/substrate-runtime-context/wire-context.py"
+T42="$(mktemp -d)/inst"; mkdir -p "$T42"; cp -R "$ENGINE/template/." "$T42/"
+printf -- '---\ntitle: 偏好\ntype: memory\nowner: x\ncreated: 2026-01-01\nupdated: 2026-01-01\n---\n主人吃素。\n' > "$T42/memory/about-owner/prefs.md"
+DG="$(mktemp -d)/ctx.md"
+# hermes adapter default_on:true → ON，--apply 把小抄刷到 env override 指定的落地文件（不碰真 ~/.hermes）
+OUT42="$(HERMES_SUBSTRATE_CONTEXT="$DG" python3 "$WC" --instance "$T42" --runtime hermes --adapters "$ENGINE/adapters" --apply 2>/dev/null)"; rc42=$?
+[ "$rc42" = 0 ] && ok "hermes(default_on) --apply rc=0" || bad "hermes --apply rc=$rc42"
+[ -f "$DG" ] && grep -q "主人吃素" "$DG" && ok "小抄按 adapter digest_file 落地（含记忆）" || bad "小抄未落地"
+# dry-run（无 --apply）不得写文件
+DG2="$(mktemp -d)/ctx2.md"
+HERMES_SUBSTRATE_CONTEXT="$DG2" python3 "$WC" --instance "$T42" --runtime hermes --adapters "$ENGINE/adapters" >/dev/null 2>&1
+[ -f "$DG2" ] && bad "dry-run 误写文件" || ok "dry-run 不写文件"
+# 无 runtime_context 的 runtime（claude-code）→ 默认关、不写、rc=0（cc/codex 天然落到这里）
+expect_rc 0 "claude-code 无 runtime_context → 默认关 rc=0" python3 "$WC" --instance "$T42" --runtime claude-code --adapters "$ENGINE/adapters"
+python3 "$WC" --instance "$T42" --runtime claude-code --adapters "$ENGINE/adapters" 2>&1 | grep -q "默认关" && ok "claude-code 报「默认关」" || bad "claude-code 未报默认关"
+# generic-filesystem 兜底 default_on:false → 也默认关
+python3 "$WC" --instance "$T42" --runtime generic-filesystem --adapters "$ENGINE/adapters" 2>&1 | grep -q "默认关" && ok "generic-filesystem 兜底默认关" || bad "generic-filesystem 未默认关"
+# 不存在的 runtime → 优雅关，rc=0
+expect_rc 0 "未知 runtime → 优雅关 rc=0" python3 "$WC" --instance "$T42" --runtime nosuch --adapters "$ENGINE/adapters"
+# 缺参 → rc=2
+expect_rc 2 "缺 --runtime → rc=2" python3 "$WC" --instance "$T42" --adapters "$ENGINE/adapters"
+# 输出无 DeprecationWarning（python3.13+ 干净）
+HERMES_SUBSTRATE_CONTEXT="$(mktemp -d)/c.md" python3 "$WC" --instance "$T42" --runtime hermes --adapters "$ENGINE/adapters" --apply 2>&1 | grep -qi "DeprecationWarning" && bad "wire-context 有 DeprecationWarning" || ok "wire-context 输出干净（无 Deprecation 噪音）"
+
 echo
 echo "==== 结果: $PASS passed, $FAIL failed, $SKIP skipped ===="
 [ "$FAIL" = 0 ]

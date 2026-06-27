@@ -23,12 +23,15 @@ python3 <substrate-sync>/sync.py \
 让 Hermes **每个 session 开工自动把库的关键上下文灌进自己**（关于主人的记忆 + 各区速览 +
 意图→skill 路由表 + 房规），解决「意图触发飘 / 记忆不进 agent / 不主动用库」。两步：
 
-1. **保持一份最新小抄**（输出落本地文件，不入库）：
+1. **保持一份最新小抄**（走**通用** `wire-context.py`——落地路径从本 adapter 的 `runtime_context.digest_file` 读，核心不硬编码 `~/.hermes`）：
    ```sh
    cd <instance> && git pull --ff-only -q 2>/dev/null
-   python3 skills/substrate-runtime-context/render-context.py . > ~/.hermes/substrate-context.md
+   python3 skills/substrate-runtime-context/wire-context.py \
+       --instance . --runtime hermes --adapters adapters --apply
+   # 读本 adapter 的 runtime_context（default_on: true）→ 生成小抄 → 刷新到 digest_file。
+   # 测试/多实例可用 HERMES_SUBSTRATE_CONTEXT 覆盖落地路径。
    ```
-2. **让 Hermes 启动时把该文件加载进 system prompt / 上下文。**
+2. **让 Hermes 启动时把该文件加载进 system prompt / 上下文**（一次性，见下「注入点」）。
 
 按 Hermes 能否自己跑 shell 分两条路：
 
