@@ -11,7 +11,7 @@
 
 - **新 skill `substrate-runtime-context`**：runtime 常驻接入层——生成一张【定量】「上下文小抄」（关于主人记忆 + 各区 Agent Packet + 从 skill description 派生的意图→skill 路由表 + 房规），由 runtime 的 session-start hook 注入，治「意图触发飘 / 记忆不进 agent / 不主动用库」。`render-context.py` 零依赖；超体积上限只 stderr 告警不失败。默认只给对话型助理（Hermes/openclaw）接 hook，claude-code/codex 默认不接（skill 仍 `target_runtimes: [all]`、中立可装，零影响）。
 - **doctor**：新增「about-owner 体积」护栏——`memory/about-owner` 正文总字符超阈值（8000）时 WARN，防常驻小抄膨胀（不改退出码）。
-- **runtime 中立的注入通路**：`runtime_context` 提升为**通用 adapter 契约字段**（`adapters/README.md` 文档化：`default_on`/`digest_file`/`inject_via`/`refresh`）。新脚本 `wire-context.py` 通用地读 `adapters/<runtime>/adapter.yaml` 决定开/关并刷新小抄到声明路径——**核心不认任何 runtime 名**，hermes/openclaw/将来任意 agent 走同一通路（给它写个 adapter 块即可，核心零改动）。`generic-filesystem` 补 `runtime_context` 兜底（默认关，显式开启）；`adapters/hermes` 填实为第一个具体 adapter（注入点标占位待真机验证）。
+- **runtime 中立的注入通路**：`runtime_context` 提升为**通用 adapter 契约字段**（`adapters/README.md` 文档化：`default_on`/`digest_file`/`inject_via`/`refresh`）。新脚本 `wire-context.py` 通用地读 `adapters/<runtime>/adapter.yaml` 决定开/关并刷新小抄到声明路径——**核心不认任何 runtime 名**，hermes/openclaw/将来任意 agent 走同一通路（给它写个 adapter 块即可，核心零改动）。`generic-filesystem` 补 `runtime_context` 兜底（默认关，显式开启）；`adapters/hermes` 填实为第一个具体 adapter——**注入点已真机验证**：Hermes 原生 context-file 机制（网关 cwd=`~/.hermes` 下 `.hermes.md` 每条消息自动加载，≤20000 字符，安全扫描后注入），故 `digest_file: ~/.hermes/.hermes.md`，**无需改 config、无需重启、逐条消息生效**。
 - **文档/onboarding**：`bootstrap.md` + `substrate-bootstrap` + README Option-A 增「让本 runtime 常驻接入」步（agent 读到即可自接）。
 - **doctor**：新增「提交密钥/凭据」扫描（Forbidden 红线检测层；高置信形态类 → ERROR，低置信标签启发 → WARN，豁免 `skills/`，`privacy: sensitive` zone 额外标注）。
 - **doctor**：新增「引擎版本错位」检测——vendored skill 的引擎版本（`skills/.engine-version`）vs 实例 `SUBSTRATE_VERSION` 不一致时 WARN（抓「--refresh 了 skill 却没 migrate」或反之）。

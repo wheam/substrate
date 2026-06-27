@@ -31,14 +31,19 @@ local_manifest:
 
 # ── 常驻上下文注入（substrate-runtime-context）────────────
 # 让 Hermes 开工自动加载库摘要（关于主人记忆 + 各区速览 + 路由表 + 房规）。
-# 注入点为占位约定，待真实 Hermes 机 round-trip 验证后固化（见 README「常驻上下文注入」）。
+# 注入点【已在真机验证 2026-06-27】（源码 agent/prompt_builder.py build_context_files_prompt）：
+#   Hermes 原生 context-file 机制——网关进程 cwd = HERMES_HOME(~/.hermes)，每条消息自动加载该目录下的
+#   `.hermes.md`（优先级最高，walk-to-git-root），加载前做 prompt-injection 安全扫描，每源上限 20000 字符。
+#   => 把小抄写进 ~/.hermes/.hermes.md 即被注入：【无需改 config.yaml、无需重启、逐条消息生效】。
+#   SOUL.md 是独立的人设槽位（也每条消息加载）——故意不碰它，保持人设与库知识分离。
 runtime_context:
   default_on: true                                  # 对话型助理默认接；cc/codex 默认关
   generator: "python3 <instance>/skills/substrate-runtime-context/render-context.py <instance>"
-  digest_file: "~/.hermes/substrate-context.md"     # 生成器输出落地（本地，不入库）
+  digest_file: "~/.hermes/.hermes.md"               # Hermes 原生 context 文件（网关 cwd 下，自动加载）
   digest_file_env_override: "HERMES_SUBSTRATE_CONTEXT"
-  inject_via: "config.yaml 的 system prompt 加载该文件"   # ← 占位，待真机确认确切字段
-  refresh: "session-start hook（路 A，Hermes 自刷）或 launchd/cron（路 B，外部刷）"
+  inject_via: "原生 context-file：网关 cwd=~/.hermes 下的 .hermes.md 每条消息自动加载（≤20000 字符，安全扫描后注入）；无需改 config、无需重启"
+  injection_cap_chars: 20000                         # Hermes 端硬上限（CONTEXT_FILE_MAX_CHARS）；小抄护栏 12000 安全落在内
+  refresh: "launchd/cron 或 Hermes 内置 cron 定时跑：git pull + wire-context.py --apply（无 per-message shell hook，故用定时刷新）"
 
 notes: >
   最小声明：路径为占位约定，待在真实 Hermes 机上验证后固化。
