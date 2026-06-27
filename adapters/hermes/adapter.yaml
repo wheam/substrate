@@ -43,7 +43,8 @@ runtime_context:
   digest_file_env_override: "HERMES_SUBSTRATE_CONTEXT"
   inject_via: "原生 context-file：网关 cwd=~/.hermes 下的 .hermes.md 每条消息自动加载（≤20000 字符，安全扫描后注入）；无需改 config、无需重启"
   injection_cap_chars: 20000                         # Hermes 端硬上限（CONTEXT_FILE_MAX_CHARS）；小抄护栏 12000 安全落在内
-  refresh: "launchd/cron 或 Hermes 内置 cron 定时跑：git pull + wire-context.py --apply（无 per-message shell hook，故用定时刷新）"
+  refresh: "事件驱动（无定时器）：bootstrap 写一次 + 写库后由 house-rules 跑 wire-context.py --apply 刷新 + 远程更新靠开工自检 git pull 带入"
+  refresh_note: "不挂 on_session_start 自动 shell hook——其首次授权 TTY-only（agent/shell_hooks.py），网关需 hooks_auto_accept 放宽安全，得不偿失"
 
 notes: >
   最小声明：路径为占位约定，待在真实 Hermes 机上验证后固化。

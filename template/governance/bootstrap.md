@@ -20,10 +20,10 @@
 意图触发飘（说「待办」不触发 todo）/ 记忆不进 agent / 不主动用库。
 
 - **默认只给对话型助理接**（Hermes / openclaw 等）；**写代码型 runtime（claude-code / codex）默认不接**——它们各有原生记忆，整张小抄对写代码是噪音。
-- 怎么接因 runtime 而异，见对应 `adapter`（如引擎 `adapters/hermes/README.md`）。两条路：
-  - **A（runtime 能跑 shell，自助）**：把「`git pull` → `render-context.py` → 注入」接进它的 session-start hook，agent 读 adapter 即可自己接。
-  - **B（纯聊天网关，不能跑 shell）**：后台定时任务刷新小抄文件 + runtime 启动时加载该文件（需一个有 shell 的人/agent 接一次）。
-- 接好后**日常零操作**：小抄随库自动更新，永不手动维护；超体积 doctor 会提醒精简 about-owner。
+- 怎么接因 runtime 而异，全从对应 `adapter` 的 `runtime_context` 块读（如引擎 `adapters/hermes/README.md`），由通用 `wire-context.py` 照办。接入是**事件驱动、无定时器**：
+  - **写一次**：bootstrap 末尾跑 `python3 <实例>/skills/substrate-runtime-context/wire-context.py --instance <实例> --runtime <本机 runtime> --apply`，落地小抄（注入未开的 runtime 上是 no-op）。
+  - **之后自动**：写库后由 `house-rules` 常驻规则再刷一次；远程更新靠开工自检的 `git pull` 在你下次用库时带入。
+- **日常零操作、无需定时器**：小抄随「写库 / 用库」事件刷新，永不手动维护；超体积 doctor 会提醒精简 about-owner。
 
 ## 检查自己是否就绪
 

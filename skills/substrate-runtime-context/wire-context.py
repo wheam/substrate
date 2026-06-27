@@ -95,7 +95,9 @@ def main(argv):
             return 2
     instance = args.get("instance")
     runtime = args.get("runtime")
-    adapters = args.get("adapters") or "adapters"
+    # 默认 <instance>/adapters：自包含实例由 init-instance.sh 把 adapters/ 一并 vendor 进实例，
+    # 故 skill 里只需 --instance + --runtime，免传引擎路径。显式 --adapters 仍可覆盖。
+    adapters = args.get("adapters") or (os.path.join(instance, "adapters") if instance else "adapters")
     if not instance or not runtime:
         sys.stderr.write("wire-context: 需 --instance <根> 与 --runtime <名>\n")
         return 2

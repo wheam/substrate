@@ -34,7 +34,10 @@ reason: 读写/维护知识页 + 执行宪法（写内容、跑 git）
    自动(重)建该目录 README 的索引块（每页一条）。新增 zone 才动根 README。
 6. **自检**：跑 `python3 <substrate-doctor skill 目录>/doctor.py <实例根>`，修掉所有 ERROR。
 7. **提交**：`git add -A && git commit -m "<说明>" && git push`。
-8. **汇报**：向用户列出本次创建/修改的所有文件。
+8. **刷新常驻上下文**（若本 runtime 接了 `substrate-runtime-context`）：写库后顺手跑
+   `python3 <实例根>/skills/substrate-runtime-context/wire-context.py --instance <实例根> --runtime <你的 runtime> --apply`，
+   让改动立刻进下一条消息（注入未开的 runtime 上为 no-op）。
+9. **汇报**：向用户列出本次创建/修改的所有文件。
 
 ## 删除一个页（用 curate.py，别手删——会留断链）
 

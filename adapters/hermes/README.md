@@ -39,10 +39,13 @@ python3 <substrate-sync>/sync.py \
 > 所以把小抄写进 `~/.hermes/.hermes.md` 就被注入:**不用改 `config.yaml`、不用重启、逐条消息生效**。
 > （`adapter.yaml` 的 `digest_file` 已指向 `~/.hermes/.hermes.md`。SOUL.md 是独立人设槽位，故意不碰。）
 
-**于是「接线」坍缩成一件事:保持 `~/.hermes/.hermes.md` 刷新。** 因为没有 per-message 的 shell hook，用定时刷新:
+**于是「接线」坍缩成一件事:保持 `~/.hermes/.hermes.md` 刷新——而且是事件驱动、不用定时器:**
 
-- **定时刷新（推荐）**：launchd/cron 或 Hermes 内置 cron 每 N 分钟跑第 1 步（`git pull` + `wire-context.py --apply`）。文件一更新，下条消息 Hermes 即读到最新。
-- **能跑 shell 的 agent**：也可在它自己的 session-start 例程里顺手跑第 1 步。
+- **bootstrap 写一次**：上手时跑一次 `wire-context.py --apply`（上面的命令）落地小抄。其中**路由表 + 房规 + 各区地图**是稳定的，写一次就长期管用。
+- **写库后刷新**：之后 `house-rules.md` 里有常驻规则——Hermes **每次写完库就再跑一次** `wire-context.py --apply`，新记忆/待办立刻进下一条消息。
+- **远程更新**：别人改的库，靠开工自检的 `git pull` 在你下次用库时带进来。
+
+> 为什么**不**用「`on_session_start` 自动 shell hook」：Hermes 的 shell-hook 首次授权是 **TTY-only**（`agent/shell_hooks.py`），飞书网关答不了，要靠 `hooks_auto_accept: true` 放宽安全才能无人值守——得不偿失。改用「写库即刷」更安全，纯走 Hermes 平时动作。
 
 **默认开关**：本注入**默认给 Hermes 开**；claude-code / codex 默认**不**接（各有原生记忆、写代码不需要，整张小抄是噪音）。
 **只灌一部分**：若要给写代码型 runtime 选择性开、又不想灌入个人记忆，裁掉小抄的「## 关于主人（记忆）」整段，只留各区速览 + 路由表 + 房规。

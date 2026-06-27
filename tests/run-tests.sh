@@ -521,6 +521,15 @@ expect_rc 2 "缺 --runtime → rc=2" python3 "$WC" --instance "$T42" --adapters 
 # 输出无 DeprecationWarning（python3.13+ 干净）
 HERMES_SUBSTRATE_CONTEXT="$(mktemp -d)/c.md" python3 "$WC" --instance "$T42" --runtime hermes --adapters "$ENGINE/adapters" --apply 2>&1 | grep -qi "DeprecationWarning" && bad "wire-context 有 DeprecationWarning" || ok "wire-context 输出干净（无 Deprecation 噪音）"
 
+echo "== 43) wire-context: --adapters 默认 <instance>/adapters（自包含实例 vendor 了 adapters）=="
+WC2="$ENGINE/skills/substrate-runtime-context/wire-context.py"
+T43="$(mktemp -d)/inst"; mkdir -p "$T43"; cp -R "$ENGINE/template/." "$T43/"; cp -R "$ENGINE/adapters" "$T43/adapters"
+printf -- '---\ntitle: p\ntype: memory\nowner: x\ncreated: 2026-01-01\nupdated: 2026-01-01\n---\n主人吃素。\n' > "$T43/memory/about-owner/prefs.md"
+DG43="$(mktemp -d)/c.md"; EMPTY43="$(mktemp -d)"
+# 从没有 adapters/ 的 cwd 跑、且不传 --adapters → 仍应用 <instance>/adapters 找到 hermes 并 ON
+( cd "$EMPTY43" && HERMES_SUBSTRATE_CONTEXT="$DG43" python3 "$WC2" --instance "$T43" --runtime hermes --apply >/dev/null 2>&1 )
+[ -f "$DG43" ] && grep -q "主人吃素" "$DG43" && ok "默认 --adapters→<instance>/adapters（免传引擎路径）" || bad "默认 adapters 未落到实例"
+
 echo
 echo "==== 结果: $PASS passed, $FAIL failed, $SKIP skipped ===="
 [ "$FAIL" = 0 ]
