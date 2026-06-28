@@ -88,13 +88,20 @@ def skill_description(text):
 
 
 def router(root):
-    """扫 skills/<name>/SKILL.md，按 name+description 拼「触发→skill」表（确定性排序）。"""
+    """扫 skills/<name>/SKILL.md，按 name+description 拼「触发→skill」表（确定性排序）。
+
+    只收 `substrate-*`（知识库维护 skill）——本小抄是「怎么用知识库」的路由，
+    runtime 里的自定义 skill（curio / operating-* / 各类 research…）有自己的触发，
+    不属于这里，纳入只会膨胀小抄、稀释信号。
+    """
     rows = []
     for p in sorted(glob.glob(os.path.join(root, "skills", "*", "SKILL.md"))):
+        name = os.path.basename(os.path.dirname(p))
+        if not name.startswith("substrate-"):
+            continue
         t = read_text(p)
         if not t:
             continue
-        name = os.path.basename(os.path.dirname(p))
         desc = skill_description(t)
         if desc:
             rows.append("- **%s** — %s" % (name, desc))

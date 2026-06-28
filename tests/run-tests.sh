@@ -473,6 +473,10 @@ printf '%s' "$OUT40" | grep -q "substrate-memory" && ok "纳入各区 Agent Pack
 printf '%s' "$OUT40" | grep -q "主人吃素" && ok "纳入 about-owner 记忆正文" || bad "缺 about-owner 正文"
 printf '%s' "$OUT40" | grep -q "type: memory" && bad "记忆 frontmatter 泄漏" || ok "记忆 frontmatter 已剥离"
 printf '%s' "$OUT40" | grep -q "加个待办" && ok "路由表从 skill description 派生" || bad "缺路由表触发词"
+# 路由表只收 substrate-*：自定义 skill 不该混进来（防小抄膨胀 + 信号稀释）
+mkdir -p "$T40/skills/curio"; printf -- '---\nname: curio\ndescription: "open a curio session"\ntarget_runtimes: [hermes]\nrisk_level: low\ncapabilities: [shell]\n---\nx\n' > "$T40/skills/curio/SKILL.md"
+OUT40b="$(python3 "$RCX" "$T40" 2>/dev/null)"
+printf '%s' "$OUT40b" | grep -q "curio" && bad "路由表漏进自定义 skill curio" || ok "路由表只收 substrate-*（排除自定义 skill）"
 printf '%s' "$OUT40" | grep -q "先提议后写\|绝不擅自写库" && ok "房规（主动捕获先提议）已含" || bad "缺房规"
 # about-owner 的 README 索引页不当作记忆正文混入
 printf '%s' "$OUT40" | grep -q "命名约定（引擎中立）" && bad "about-owner/README 被误当记忆" || ok "about-owner/README 不混入记忆段"
