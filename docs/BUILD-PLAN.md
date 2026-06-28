@@ -3,7 +3,7 @@
 > **给开发 session 的说明**：这是 **Substrate** 开源引擎的完整设计 + 开发方案。读完即可着手开发。
 > 脚手架就在本仓库（Substrate 引擎）。设计原理见 `./architecture.md`、`./concepts.md`。
 > 命名：引擎 = **Substrate**；用户自己的实例 = `<your-instance>`（用户自取，私有）；skill 套件命名为 `substrate-*`。
-> 状态：设计完成、待开发。本文件是开发依据。
+> 状态：P0–P5 核心已实现（引擎已发布、测试套件全绿）。本文件既是当初的开发依据，也是后续演进的设计对照——读它了解「为什么这么设计」，具体落地以仓库实际代码 / `schemas/` / `CHANGELOG.md` 为准。
 
 ---
 
@@ -104,7 +104,9 @@ substrate/
 ## 6. Skills 分发系统
 
 - **三类**：自己写的（纯文件，跟仓库走）｜第三方（`_registry.md` 只存 URL+pin，代码不入库，安装时 clone）｜agent 自总结的（先自动回流到 `_incoming/`，过 admission 才晋升）。
-- **安装（管家模式）**：一台机器当管家，按 **fleet 角色 + skill 声明的目标 runtime** **选择性安装**（不 install-all）到各 runtime；本地维护「装了啥+版本」清单（**不入库**）。
+- **安装（管家模式）**：一台机器当管家，按 **skill 声明的目标 runtime** **选择性安装**（不 install-all）到各 runtime；本地维护「装了啥+版本」清单（**不入库**）。
+  > **现状（诚实化）**：`substrate-sync` 已实现的是**按 `target_runtimes` 过滤**。「按 **fleet 角色** 选择性安装」目前是**上层策略**，不是核心机制——管家 agent 自己决定喂哪个 `--src` 子集 / 在哪台机装什么。
+  > **Deferred（设计已记，暂不实现，YAGNI）**：当出现第一个真要按角色分装的 skill 时，加可选 `target_roles: [..]`（skill-manifest）+ `sync --role <r>`，**两边都声明才过滤、缺省 no-op**（向后兼容，不给现有全 `[all]` 的 skill 增加表面积）。角色名是用户自定义字符串，引擎不枚举。
 - **多 runtime 变体**：一个 skill 文件夹内同放各 runtime 版本，靠约定区分；skill 带 manifest 声明目标 runtime。
 
 ### 6.1 第三方 skill 引用以什么形式存在
@@ -153,7 +155,7 @@ Claude Code「用」一个 skill = 该 skill 在它的 skill 目录（`~/.claude
 **把它当数据库/框架迁移做：**
 
 1. **版本化**：引擎有 `ENGINE_VERSION`；实例在 `governance/SUBSTRATE_VERSION` 记录自己基于的版本（committed）。
-2. **迁移即一等公民**：引擎 `migrations/` 目录，每个迁移是有序、命名、**幂等**、可验证、可回滚的 vN→vN+1 变换（契约见 `schemas/migration.schema.yaml`：id / from / to / steps[{action,verify}] / idempotent / preserves / rollback / risk_level）。
+2. **迁移即一等公民**：引擎 `migrations/` 目录，每个迁移是有序、命名、**幂等**、可验证、可回滚的 vN→vN+1 变换（契约见 `schemas/migration.schema.yaml`：id / from_version / to_version / steps[{action,verify}] / idempotent / preserves / rollback / risk_level）。
 3. **升级流程（`substrate-migrate` skill 执行）**：
    - a. **检测** `instance.version < engine.version` → 有 pending 迁移。
    - b. **不静默执行**：读出区间内所有迁移，生成**迁移计划**呈现给人。
@@ -177,6 +179,9 @@ Claude Code「用」一个 skill = 该 skill 在它的 skill 目录（`~/.claude
 - **职责**：把用户现有的一堆东西（散落 markdown、文件夹、Obsidian vault、Notion/Apple Notes 导出、纯文本）批量搬进一个新实例，免手动苦力。
 - **流程**：扫描来源 → 对每条用 `substrate-intake` **批量分类**（四去向/落哪 zone/该否拆 skill/剔敏感位）→ 生成**映射计划**（dry-run）→ 人审批 → 执行（放文件、补缺失 frontmatter、建初始索引 + Agent Packet、注册 zone、跑 doctor）→ commit。
 - **关键**：复用 `intake`（单条分类器的批量版）+ **来源适配器**（Obsidian vault / Notion 导出 / 纯 md 文件夹 / Apple Notes 导出…）；幂等 + dry-run + 审批闸门；模糊的进隔离区，**不批量塞垃圾**。
+
+> **现状（诚实化）**：`substrate-import` 已交付**最小版**——`generic-md` / `obsidian` 的 markdown 拷贝器 + 密钥扫描 `REVIEW` 闸（命中即不入库），默认落单一 zone。这覆盖了常见路径（Notion / Apple Notes **导出本就是 markdown**，走 `generic-md` 即可），但还不是上面画的完整愿景。
+> **Deferred（设计已记，暂不实现，YAGNI——import 是低频一次性工具，等真有大 vault 要迁再做）**：① 让 import 吐**机器可读 dry-run plan**（`文件 → 建议 zone → 四去向`）；② 真正接 `substrate-intake` 把每条**分类到对的 zone**（而非全堆一个区）+ 隔离区 review；③ 视需要再加非 markdown 的来源适配器。
 
 **完整 init 流程（别人 clone 引擎后）**：
 1. 拿引擎：`git clone`（agent-native 主路径）。
@@ -204,7 +209,7 @@ Claude Code「用」一个 skill = 该 skill 在它的 skill 目录（`~/.claude
 
 1. 宪法单源 + 写入走 skill → 规则不漂移。2. 两级索引。3. zones 注册 + 新增类型 procedure。4. `substrate-doctor` 增量体检（断链/孤儿/索引漂移/缺 frontmatter/registry 风险）。5. bootstrap 一致上手。
 **核心原则：协议失效时，结果应是「可修复的漂移」，而非「污染正式状态」。** 防御纵深：预防（入口横幅+走 skill）→ 检测（doctor）→ 隔离（危险写入/回流进 audit 区）→ 纠正（低风险自动修，高风险转人）。无法 100% 强制模型守协议，所以架构必须容错。
-> **doctor 形态（skills-first）**：doctor 是 skill，不是二进制。为可复现 + 便宜 + 可 CI，它**内嵌零安装的确定性 shell**（`grep` 抽 `[[wikilink]]`〔先剥 inline code/代码块〕集合差找断链/孤儿、`sort`/`comm` 找漂移、python3 标准库做受限子集 frontmatter 解析〔不假设 PyYAML〕）。skill 是唯一真相源；它同时是迁移的测试套件（迁移前后跑同一套不变量）。**实现约束见 §15 P1。**
+> **doctor 形态（skills-first）**：doctor 是 skill，不是二进制。为可复现 + 便宜 + 可 CI，它**内嵌零依赖的确定性检查**（纯 python3 标准库实现：正则抽 `[[wikilink]]`〔先剥 inline code/代码块〕做集合差找断链/孤儿、比对索引找漂移、受限子集 frontmatter 解析〔不假设 PyYAML〕、csv 读分片计数）。skill 是唯一真相源；它同时是迁移的测试套件（迁移前后跑同一套不变量）。**实现约束见 §15 P1。**
 
 ---
 

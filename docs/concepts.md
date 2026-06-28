@@ -50,7 +50,7 @@
 
 - **Migration（迁移）**：把「引擎版本升级」当数据库迁移做——有序、命名、**幂等**、可验证、**可回滚**（=失败时 `git reset` 到 `pre-migrate-<from>` tag **整体恢复**，**非** vN→vN-1 反向迁移；引擎不提供反向迁移）的 vN→vN+1 变换。有序清单见 `migrations/INDEX.md`，契约见 `schemas/migration.schema.yaml`。任何迁移不丢数据：git tag 快照 + doctor 前后校验 + 模糊内容进隔离区。
 - **`SUBSTRATE_VERSION`**：实例在 `governance/SUBSTRATE_VERSION` 记录自己基于的引擎版本（committed）。`instance.version < engine.version` 即有 pending 迁移。
-- **Doctor（体检）**：增量防退化体检（断链 / 孤儿 / 索引漂移 / 缺 frontmatter / registry 风险 / 毕业阈值），**同时是迁移的测试套件**（迁移前后跑同一套不变量检查）。为可复现 + 便宜 + 可在 CI 跑，doctor skill 内嵌零安装的确定性 shell（grep / sort / python3 解析 YAML），不依赖独立二进制。
+- **Doctor（体检）**：增量防退化体检（断链 / 孤儿 / 索引漂移 / 缺 frontmatter / registry 风险 / 毕业阈值），**同时是迁移的测试套件**（迁移前后跑同一套不变量检查）。为可复现 + 便宜 + 可在 CI 跑，doctor skill 内嵌零依赖的确定性检查（纯 python3 标准库：正则 / glob / csv 解析 frontmatter 与分片，不假设 PyYAML），不依赖独立二进制。
 
 ## 机器 / runtime
 

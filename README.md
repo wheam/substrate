@@ -96,9 +96,9 @@ cd ~/my-cortex && git init && git add -A && git commit -m "init my substrate ins
 python3 ~/my-cortex/skills/substrate-sync/sync.py \
         --src ~/my-cortex/skills --runtime claude-code --apply
 #   Swap --runtime for codex / hermes / … (see adapters/)
-#   NOTE: claude-code + generic-filesystem are verified; codex/hermes adapter paths are
-#   provisional (declared, not yet round-tripped on real hardware) — after install, verify
-#   the skill actually landed where your agent reads skills from.
+#   NOTE: claude-code + generic-filesystem are verified; the hermes adapter's standing-context
+#   injection is verified on real hardware, but its skill-install path (like codex's) is still
+#   provisional — after install, verify the skill actually landed where your agent reads skills from.
 
 # 4) Onboard your agent: tell it "get set up on my personal repo"
 #    → triggers substrate-bootstrap (reads the constitution + zones, sets identity, self-checks)
