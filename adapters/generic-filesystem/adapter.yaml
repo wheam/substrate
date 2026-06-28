@@ -41,6 +41,8 @@ local_manifest:
 # 你的 agent 会加载的文件，再跑 wire-context.py。注入点（怎么让 agent 读该文件）由你的 agent 决定。
 runtime_context:
   default_on: false                          # 兜底默认关；显式开启
+  include_memory: true                       # 是否把 about-owner 记忆纳入小抄（粗粒度；默认含，显式 false 关）。
+                                             # 细粒度仍按 memory zone 的 readers 自动决定（readers 不含本 runtime → 记忆段略过）。
   generator: "python3 <instance>/skills/substrate-runtime-context/render-context.py <instance>"
   digest_file: "${SUBSTRATE_CONTEXT_FILE}"   # 占位：小抄落地路径，由调用方提供
   digest_file_env_override: "SUBSTRATE_CONTEXT_FILE"

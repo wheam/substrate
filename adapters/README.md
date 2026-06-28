@@ -15,6 +15,7 @@
   | 字段 | 含义 |
   |---|---|
   | `default_on` | `true`=该 runtime 默认接注入（对话型助理如 hermes/openclaw）；缺省/`false`=默认关（写代码型如 claude-code/codex 不声明即天然落到关） |
+  | `include_memory` | 粗粒度：是否把 about-owner 记忆纳入小抄（缺省/`true`=含；`false`=该 runtime 完全不注入记忆）。细粒度由 `memory` zone 的 `readers` 决定——readers 收窄且不含本 runtime 时，注入器自动略过记忆段（引擎遵守它宣传的 reader 范围）。 |
   | `digest_file` | 小抄落地的本地文件路径（不入库；`~`/`${ENV}` 可展开） |
   | `digest_file_env_override` | 覆盖上面路径的环境变量名（测试/多实例用） |
   | `inject_via` | 一次性接线指令：怎么让该 runtime 启动时加载 `digest_file`（注入点，因 runtime 而异） |

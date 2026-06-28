@@ -56,13 +56,16 @@ def scalar(block, key):
     return v
 
 
-def render_digest(instance):
-    """复用 render-context.py 生成小抄（继承其体积护栏告警）。失败返回 None。"""
+def render_digest(instance, runtime=None, include_memory=True):
+    """复用 render-context.py 生成小抄（继承其体积护栏告警）。失败返回 None。
+    透传 --runtime 让记忆段尊重 memory zone 的 readers；include_memory=False 时整段不注入记忆。"""
+    cmd = [sys.executable, os.path.join(SKILL_DIR, "render-context.py"), instance]
+    if runtime:
+        cmd += ["--runtime", runtime]
+    if not include_memory:
+        cmd += ["--no-memory"]
     try:
-        r = subprocess.run(
-            [sys.executable, os.path.join(SKILL_DIR, "render-context.py"), instance],
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        )
+        r = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     except Exception:
         return None
     if r.stderr:
@@ -113,7 +116,10 @@ def main(argv):
         print("[wire-context] 注入对 runtime '%s' 默认关（%s）——不写、跳过。" % (runtime, why))
         return 0
 
-    digest = render_digest(instance)
+    # include_memory：粗粒度总开关（adapter 可显式 false 不注入记忆）；默认含。
+    # 细粒度（按 runtime 尊重 memory zone 的 readers）由 render-context 据 --runtime 决定。
+    include_memory = (scalar(rc_block, "include_memory") != "false")
+    digest = render_digest(instance, runtime=runtime, include_memory=include_memory)
     if digest is None:
         sys.stderr.write("wire-context: 生成小抄失败（render-context.py）。\n")
         return 2

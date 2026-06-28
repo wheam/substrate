@@ -41,6 +41,40 @@ def fm_field(text, key):
     return f.group(1).strip().strip("'\"") if f else None
 
 
+def _zone_readers(root, zone_path):
+    """从 governance/zones.md 的 YAML 块里，找 path 覆盖 zone_path 的 zone，返回其 readers（小写列表）。
+    无 zones.md / 找不到该 zone / 该 zone 无 readers → None（按「不受限」处理）。"""
+    zt = read_text(os.path.join(root, "governance", "zones.md"))
+    if not zt:
+        return None
+    m = re.search(r"```yaml\n(.*?)```", zt, re.S)
+    block = m.group(1) if m else zt
+    for chunk in re.split(r"(?m)^\s*-\s+id:", block)[1:]:
+        pm = re.search(r"(?m)^\s*path:\s*(\S+)", chunk)
+        if not pm:
+            continue
+        zpath = pm.group(1).strip("'\"").rstrip("/")
+        if not (zone_path == zpath or zone_path.startswith(zpath + "/")):
+            continue
+        rm = re.search(r"(?m)^\s*readers:\s*\[(.*?)\]", chunk)
+        if not rm:
+            return None
+        return [x.strip().strip("'\"").lower() for x in rm.group(1).split(",") if x.strip()]
+    return None
+
+
+def memory_allowed(root, runtime):
+    """注入器是否应把 about-owner 记忆纳入【本 runtime】的小抄——尊重 memory zone 声明的 readers。
+    这不是机器级访问控制（拦不住铁了心读文件的 agent），而是引擎自己的注入器遵守它所宣传的 reader 范围
+    （『协议是导航』）。无 runtime（独立调用）/ readers 缺省或含 'all' → 允许（沿用旧行为）。"""
+    if not runtime:
+        return True
+    readers = _zone_readers(root, "memory/about-owner")
+    if not readers or "all" in readers:
+        return True
+    return runtime.lower() in readers
+
+
 def read_core(root):
     """核心摘要 memory/about-owner/_core.md 的正文（永远整段进小抄）。无则 None。"""
     t = read_text(os.path.join(root, "memory", "about-owner", "_core.md"))
@@ -130,16 +164,23 @@ def router(root):
     return rows
 
 
-def render(root):
+def render(root, runtime=None, include_memory=True):
     parts = ["# Substrate 常驻上下文（自动生成，勿手改）"]
-    core = read_core(root)
-    if core:
-        parts.append("## 关于主人（核心）")
-        parts.append(core)
-    idx = memory_index(root)
-    if idx:
-        parts.append("## 关于主人（记忆目录，需要细节时用 substrate-memory 读对应页）")
-        parts.append("\n".join(idx))
+    scope_ok = memory_allowed(root, runtime)
+    if include_memory and not scope_ok and runtime:
+        sys.stderr.write(
+            "render-context: ⚠ memory/about-owner 的 readers 收窄且不含 runtime '%s' "
+            "→ 记忆段已略过（仅注入各区/路由/房规）。\n" % runtime
+        )
+    if include_memory and scope_ok:
+        core = read_core(root)
+        if core:
+            parts.append("## 关于主人（核心）")
+            parts.append(core)
+        idx = memory_index(root)
+        if idx:
+            parts.append("## 关于主人（记忆目录，需要细节时用 substrate-memory 读对应页）")
+            parts.append("\n".join(idx))
     packets = zone_packets(root)
     if packets:
         parts.append("## 库里有什么（各区速览）")
@@ -155,11 +196,24 @@ def render(root):
 
 
 def main(argv):
-    root = argv[1] if len(argv) > 1 else "."
+    root = "."
+    runtime = None
+    include_memory = True
+    it = iter(argv[1:])
+    for a in it:
+        if a == "--runtime":              # 按 memory zone 的 readers 决定是否纳入记忆段
+            runtime = next(it, None)
+        elif a == "--no-memory":          # 粗粒度总开关（adapter 的 include_memory: false 走这里）
+            include_memory = False
+        elif a.startswith("--"):
+            sys.stderr.write("render-context: 未知参数 %s\n" % a)
+            return 2
+        else:
+            root = a
     if not os.path.isdir(root):
         sys.stderr.write("render-context: 路径不是目录: %s\n" % root)
         return 2
-    out = render(root)
+    out = render(root, runtime=runtime, include_memory=include_memory)
     try:
         limit = int(os.environ.get("SUBSTRATE_CONTEXT_MAX_CHARS", DEFAULT_MAX_CHARS))
     except ValueError:

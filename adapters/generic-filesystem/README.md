@@ -22,6 +22,19 @@ python3 <substrate-sync>/sync.py \
 
 `sync.py` 只装 `target_runtimes` 含 `generic-filesystem`（或 `all`）的 skill，并把本地清单写进 `--target`。
 
+## 常驻上下文注入（runtime_context）——默认关
+
+兜底 adapter 在 `adapter.yaml` 里声明了 `runtime_context` 块，但**默认 `default_on: false`**：兜底不替不知名 agent 擅自往它的上下文里塞东西。若你的 agent 能「加载某个文件进上下文/系统提示」，可显式开启,让它每次开工自动带上库摘要（关于主人记忆 + 各区速览 + 意图→skill 路由表 + 房规）：
+
+```sh
+export SUBSTRATE_CONTEXT_FILE=~/agent-context/substrate.md   # 你的 agent 会加载的文件
+python3 <instance>/skills/substrate-runtime-context/wire-context.py \
+  --instance <instance> --runtime generic-filesystem --apply
+# 默认关：不传时只打印「默认关」不写文件。注入点（怎么让 agent 读该文件）由你的 agent 决定。
+```
+
+派生真实 runtime 的 adapter 时，把 `default_on` 设 true、`digest_file` 指到该 runtime 每次会加载的文件即可（hermes adapter 即如此——见 `../hermes/`）。
+
 ## 派生一个真实 runtime 的 adapter
 
 复制本目录到 `adapters/<runtime>/`，把 `runtime` 改名、`target` 换成该 runtime 的固定 skill 目录、`detect.method` 换成探测可执行体（见 `claude-code/`）。

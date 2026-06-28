@@ -38,6 +38,8 @@ local_manifest:
 #   SOUL.md 是独立的人设槽位（也每条消息加载）——故意不碰它，保持人设与库知识分离。
 runtime_context:
   default_on: true                                  # 对话型助理默认接；cc/codex 默认关
+  include_memory: true                              # 是否把 about-owner 记忆纳入小抄（粗粒度；默认含）。
+                                                    # 细粒度仍按 memory zone 的 readers 决定：readers 收窄且不含本 runtime 时，记忆段自动略过。
   generator: "python3 <instance>/skills/substrate-runtime-context/render-context.py <instance>"
   digest_file: "~/.hermes/.hermes.md"               # Hermes 原生 context 文件（网关 cwd 下，自动加载）
   digest_file_env_override: "HERMES_SUBSTRATE_CONTEXT"
