@@ -46,6 +46,18 @@ def read_text(p):
         return None
 
 
+def is_utf8(p):
+    """该页是否严格 UTF-8（容忍 BOM）。非 UTF-8 页本迁移不处理——但 verify 的判定口径必须与之一致，
+    否则会出现『dry-run 说要补、apply 严格解码跳过、check 又判它仍缺 → 永远 verify 失败』卡死升级。"""
+    try:
+        with open(p, "rb") as f:
+            raw = f.read()
+        (raw[3:] if raw.startswith(b"\xef\xbb\xbf") else raw).decode("utf-8")
+        return True
+    except Exception:
+        return False
+
+
 def split_frontmatter(text):
     """返回 (fm_body, start_idx, end_idx)，定位 frontmatter 块；无则 (None, None, None)。
 
@@ -76,7 +88,10 @@ def target_pages(root):
 
 
 def needs_migration(root, page):
-    """该页是否缺 tags（None 表示无 frontmatter，按缺处理但单独标记）。"""
+    """该页状态：'missing'（有 frontmatter 却缺 tags，待补）/ 'no-frontmatter' / 'non-utf8' / None（已 OK）。
+    'non-utf8' 与 'no-frontmatter' 一样【不计入待补、也不计入 verify 失败】——本迁移不碰它们，交 doctor 报告。"""
+    if not is_utf8(page):
+        return "non-utf8"   # 与 apply_to_page 的严格 UTF-8 解码口径一致，避免 verify 永久失败卡死升级
     text = read_text(page)
     if text is None:
         return None  # 读不了，交给 doctor 报告，不在这里补
@@ -141,6 +156,7 @@ def main(argv):
     plan = [(p, needs_migration(root, p)) for p in pages]
     todo = [(p, s) for p, s in plan if s == "missing"]
     skip_nofm = [p for p, s in plan if s == "no-frontmatter"]
+    skip_nonutf8 = [p for p, s in plan if s == "non-utf8"]
 
     mode = "APPLY" if apply else "DRY-RUN"
     print(f"0001-knowledge-tags-field  root={root}  mode={mode}")
@@ -148,7 +164,9 @@ def main(argv):
         print(f"  补 tags:[]   {rel(root, p)}")
     for p in skip_nofm:
         print(f"  跳过(无frontmatter，交 doctor 报告)  {rel(root, p)}")
-    if not todo and not skip_nofm:
+    for p in skip_nonutf8:
+        print(f"  跳过(非 UTF-8，本迁移不处理，交 doctor 报告)  {rel(root, p)}")
+    if not todo and not skip_nofm and not skip_nonutf8:
         print("  无需改动（所有 knowledge 页都已有 tags）")
 
     if not apply:

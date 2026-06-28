@@ -7,7 +7,8 @@ agent 各一个 todo 文件（per-agent 由 `fleet/` 派生，由 `substrate-tod
   1. 把现有 root `TODO.md` 的内容搬进 `todo/owner.md`（补最小 frontmatter：title/created/updated/type）；
   2. 建 `todo/README.md`（zone 索引：Agent Packet + 文件级索引块，登记 owner.md）；
   3. 在 `governance/zones.md` 的 YAML 块注册 `todo` zone；
-  4. 删除 root `TODO.md`（内容已无损搬入 owner.md）。
+  4. 删除 root `TODO.md`——**仅当**本次确实把它搬进 owner.md（或 owner.md 已逐字含其正文）；
+     若 owner.md 早已存在且内容不同（半次运行残留/手建），保留 root TODO.md 并告警，绝不静默删（防丢数据）。
 
 用法:
   python3 apply.py <INSTANCE_ROOT>            # dry-run：只打算做什么
@@ -70,6 +71,19 @@ def read_text(p):
         return None
 
 
+def todo_body_in_owner(root_todo, owner_p):
+    """root TODO.md 的正文（剥掉顶部 H1）是否每条非空行都已出现在 owner.md。
+    用于在 owner.md **早已存在**（非本次新建）时判定『内容确已搬入』——只有判定为是才允许删 root TODO.md。"""
+    raw = read_text(root_todo) or ""
+    body = re.sub(r"\A\s*#\s+.*\n", "", raw)
+    owner = read_text(owner_p) or ""
+    for line in body.splitlines():
+        s = line.strip()
+        if s and s not in owner:
+            return False
+    return True
+
+
 def state(root):
     """返回当前形态布尔：(owner_exists, zone_registered, root_todo_exists)。"""
     owner = os.path.isfile(os.path.join(root, "todo", "owner.md"))
@@ -83,11 +97,13 @@ def state(root):
 
 def do_apply(root):
     actions = []
+    warnings = []
     tdir = os.path.join(root, "todo")
     owner_p = os.path.join(tdir, "owner.md")
     root_todo = os.path.join(root, "TODO.md")
 
     # 1) owner.md（搬 root TODO.md 内容；幂等：已存在则不动）
+    merged_this_run = False
     if not os.path.isfile(owner_p):
         os.makedirs(tdir, exist_ok=True)
         body = ""
@@ -95,6 +111,7 @@ def do_apply(root):
             raw = read_text(root_todo) or ""
             # 剥掉原 TODO.md 顶部的 H1 标题（owner.md 用 frontmatter 的 title），其余正文逐字保留
             body = re.sub(r"\A\s*#\s+.*\n", "", raw)
+            merged_this_run = True
         with open(owner_p, "w", encoding="utf-8") as f:
             f.write(OWNER_HEADER + body.lstrip("\n"))
         actions.append("建 todo/owner.md（搬入 root TODO.md 内容 + frontmatter）")
@@ -118,12 +135,19 @@ def do_apply(root):
                 f.write(nt)
             actions.append("在 governance/zones.md 注册 todo zone")
 
-    # 4) 删 root TODO.md（内容已搬入 owner.md）
+    # 4) 删 root TODO.md —— 仅当本次确实把它搬进 owner.md，或 owner.md 已逐字含其正文。
+    #    防丢数据：若 owner.md 早已存在且内容【不同】（半次运行残留 / 手建 / 重新脚手架），
+    #    绝不静默删 root TODO.md——保留两边并告警，请人工核对后再删。
     if os.path.isfile(root_todo) and os.path.isfile(owner_p):
-        os.remove(root_todo)
-        actions.append("删除 root TODO.md（内容已无损搬入 todo/owner.md）")
+        if merged_this_run or todo_body_in_owner(root_todo, owner_p):
+            os.remove(root_todo)
+            actions.append("删除 root TODO.md（内容已无损搬入 todo/owner.md）")
+        else:
+            warnings.append(
+                "保留 root TODO.md：todo/owner.md 早已存在且未包含 TODO.md 的全部内容——"
+                "未删除以防丢数据。请人工把 root TODO.md 的待办并入 todo/owner.md，再删 root TODO.md。")
 
-    return actions
+    return actions, warnings
 
 
 def main(argv):
@@ -160,10 +184,12 @@ def main(argv):
         print("  → dry-run，未改动。加 --apply 执行。")
         return 0
 
-    actions = do_apply(root)
+    actions, warnings = do_apply(root)
     for a in actions:
         print(f"  ✓ {a}")
-    if not actions:
+    for w in warnings:
+        print(f"  ⚠ {w}")
+    if not actions and not warnings:
         print("  （无改动）")
     return 0
 
