@@ -541,6 +541,80 @@ DG43="$(mktemp -d)/c.md"; EMPTY43="$(mktemp -d)"
 ( cd "$EMPTY43" && HERMES_SUBSTRATE_CONTEXT="$DG43" python3 "$WC2" --instance "$T43" --runtime hermes --apply >/dev/null 2>&1 )
 [ -f "$DG43" ] && grep -q "主人吃素" "$DG43" && ok "默认 --adapters→<instance>/adapters（免传引擎路径）" || bad "默认 adapters 未落到实例"
 
+echo "== 44) MAJOR: 0002 迁移——owner.md 已存在且内容不同时，绝不静默删 root TODO.md（防丢数据）=="
+APP44="$ENGINE/migrations/0002-todo-zone/apply.py"
+T44="$(mktemp -d)/inst"; mkdir -p "$T44"; cp -R "$ENGINE/template/." "$T44/"
+# 冲突前态：todo/owner.md 已存在但内容【不同】，根 TODO.md 含一条独有待办（旧 bug 会把它静默删掉）
+printf -- '---\ntitle: 待办 — 主人\ntype: todo\n---\n## 进行中\n- 别的内容\n' > "$T44/todo/owner.md"
+printf '# TODO\n\n## 进行中\n- [ ] 独有待办ABC不能丢\n' > "$T44/TODO.md"
+OUT44="$(python3 "$APP44" "$T44" --apply 2>&1)"
+# 数据安全：root TODO.md 仍在（被保留待人工并入）→ 内容未丢
+[ -f "$T44/TODO.md" ] && ok "owner.md 冲突时保留 root TODO.md（不丢数据）" || bad "owner.md 冲突时 root TODO.md 被静默删除（数据丢失）"
+printf '%s' "$OUT44" | grep -q "无损搬入" && bad "owner.md 冲突仍谎称『无损搬入』" || ok "owner.md 冲突时不谎称无损搬入"
+printf '%s' "$OUT44" | grep -q "保留 root TODO.md" && ok "冲突时显式告警保留" || bad "冲突时无保留告警"
+# 正常态（owner.md 由本次新建）仍应删 root TODO.md（不破坏既有 happy-path，见 25）
+T44B="$(mktemp -d)/inst"; mkdir -p "$T44B"; cp -R "$ENGINE/template/." "$T44B/"; rm -rf "$T44B/todo"
+printf '# TODO\n\n## 进行中\n- [ ] 正常搬运XYZ\n' > "$T44B/TODO.md"
+python3 "$APP44" "$T44B" --apply >/dev/null 2>&1
+{ [ ! -f "$T44B/TODO.md" ] && grep -q "正常搬运XYZ" "$T44B/todo/owner.md"; } && ok "正常态仍无损搬运并删 root TODO.md" || bad "正常态搬运/删除回归"
+
+echo "== 45) 0001 迁移：非 UTF-8 页不再把迁移卡死（不计入 verify 失败，dry-run 标记跳过）=="
+APP45="$ENGINE/migrations/0001-knowledge-tags-field/apply.py"
+T45="$(mktemp -d)/inst"; mkdir -p "$T45/knowledge"
+printf -- '---\ntitle: OK\ntags: []\n---\n# OK\n正文\n' > "$T45/knowledge/ok.md"
+# Latin-1（非 UTF-8）页且【缺 tags】——旧 bug：宽松解码判它 missing、严格解码又跳过 → --check 永久 rc1
+python3 -c "open('$T45/knowledge/legacy.md','wb').write('---\ntitle: caf\xe9\n---\n# x\n'.encode('latin-1'))"
+expect_rc 0 "0001 --check 不被非 UTF-8 页卡成 rc1" python3 "$APP45" "$T45" --check
+python3 "$APP45" "$T45" 2>&1 | grep -q "非 UTF-8" && ok "dry-run 把非 UTF-8 页标记为跳过" || bad "非 UTF-8 页未标记跳过"
+
+echo "== 46) doctor 契约强化：zone 非法 disposition → ERROR；registry 缺 target_runtimes → WARN =="
+T46="$(mktemp -d)/i"; mkdir -p "$T46"; cp -R "$ENGINE/examples/minimal/." "$T46/"
+python3 - "$T46/governance/zones.md" <<'PY'
+import sys; p=sys.argv[1]; t=open(p,encoding="utf-8").read()
+open(p,"w",encoding="utf-8").write(t.replace("disposition: canonical","disposition: local-only",1))  # admission 页级去向误填进 zone
+PY
+OUT46="$(python3 "$DOC" "$T46" 2>&1)"; rc46=$?
+printf '%s' "$OUT46" | grep -q "disposition" && ok "非法 disposition（local-only）被抓" || bad "非法 disposition 未抓"
+[ "$rc46" = 1 ] && ok "非法 disposition → ERROR(rc1)" || bad "非法 disposition 未致 rc1 (rc=$rc46)"
+T46B="$(mktemp -d)/i"; mkdir -p "$T46B"; cp -R "$ENGINE/examples/minimal/." "$T46B/"
+printf '```yaml\nregistry:\n  - name: noruntime\n    kind: git\n    upstream_git_url: https://example.com/x.git\n    pin: v1\n```\n' > "$T46B/skills/_registry.md"
+OUT46B="$(python3 "$DOC" "$T46B" 2>&1)"; rc46b=$?
+printf '%s' "$OUT46B" | grep -q "缺 target_runtimes" && ok "registry 缺 target_runtimes → WARN" || bad "registry 缺 target_runtimes 未 WARN"
+[ "$rc46b" = 0 ] && ok "registry 缺 target_runtimes 是 WARN 不致 rc1" || bad "registry 缺 target_runtimes 误致 rc1 (rc=$rc46b)"
+
+echo "== 47) sync: --src 空/无 skill → 显式 WARN 且 --apply 非 0（误配不再伪装成功）=="
+EMPTYSRC="$(mktemp -d)/empty"; mkdir -p "$EMPTYSRC"
+OUT47="$(python3 "$SYNC" --src "$EMPTYSRC" --target "$(mktemp -d)" --runtime claude-code 2>&1)"
+printf '%s' "$OUT47" | grep -q "没有任何可识别的 skill" && ok "空 --src dry-run 显式 WARN" || bad "空 --src 无 WARN"
+expect_rc 1 "空 --src --apply → rc=1（不伪装成功）" python3 "$SYNC" --src "$EMPTYSRC" --target "$(mktemp -d)" --runtime claude-code --apply
+
+echo "== 48) init-instance.sh: 缺参返回码=2（与文件头声明的『2=调用错误』一致）=="
+expect_rc 2 "无参数 → rc=2" sh "$ENGINE/init-instance.sh"
+expect_rc 2 "--refresh 无目录 → rc=2" sh "$ENGINE/init-instance.sh" --refresh
+
+echo "== 49) C: 常驻注入尊重 memory zone 的 readers——收窄后不含的 runtime 略过记忆段（注入器守声明）=="
+RCX49="$ENGINE/skills/substrate-runtime-context/render-context.py"
+T49="$(mktemp -d)/inst"; mkdir -p "$T49"; cp -R "$ENGINE/template/." "$T49/"
+printf -- '---\ntitle: 核心\ntype: memory\n---\n主人核心记忆MEMTOKEN。\n' > "$T49/memory/about-owner/_core.md"
+# 默认 readers:[all] → 任何 runtime 都含记忆
+python3 "$RCX49" "$T49" --runtime hermes 2>/dev/null | grep -q "MEMTOKEN" && ok "readers:[all] → 记忆段照常注入" || bad "readers:[all] 记忆被误略过"
+# 把 memory zone（path: memory/about-owner）那条的 readers 收窄到只含 cortex（不含 hermes）
+python3 - "$T49/governance/zones.md" <<'PY'
+import sys,re; p=sys.argv[1]; t=open(p,encoding="utf-8").read()
+m=re.search(r"```yaml\n(.*?)```",t,re.S); blk=m.group(1)
+ent=[(e.replace("readers: [all]","readers: [cortex]") if "memory/about-owner" in e else e) for e in blk.split("\n\n")]
+open(p,"w",encoding="utf-8").write(t[:m.start(1)]+"\n\n".join(ent)+t[m.end(1):])
+PY
+ERR49="$(python3 "$RCX49" "$T49" --runtime hermes 2>&1 >/dev/null)"
+python3 "$RCX49" "$T49" --runtime hermes 2>/dev/null | grep -q "MEMTOKEN" && bad "readers 收窄后 hermes 仍被注入记忆（未尊重声明）" || ok "readers 收窄不含 hermes → 记忆段略过"
+printf '%s' "$ERR49" | grep -q "记忆段已略过" && ok "略过时 stderr 给出说明" || bad "略过无 stderr 说明"
+python3 "$RCX49" "$T49" --runtime cortex 2>/dev/null | grep -q "MEMTOKEN" && ok "readers 内 runtime（cortex）仍注入记忆" || bad "readers 内 runtime 被误略过"
+python3 "$RCX49" "$T49" --runtime hermes 2>/dev/null | grep -q "substrate-memory" && ok "略记忆但各区/路由仍注入（不整体停）" || bad "误把整张小抄停了"
+# 无 --runtime（独立调用）保持旧行为：含记忆
+python3 "$RCX49" "$T49" 2>/dev/null | grep -q "MEMTOKEN" && ok "无 --runtime 兼容旧行为（含记忆）" || bad "无 --runtime 行为被破坏"
+# include_memory 粗开关：--no-memory 一律不注入记忆（即便 readers 允许）
+python3 "$RCX49" "$T49" --runtime cortex --no-memory 2>/dev/null | grep -q "MEMTOKEN" && bad "--no-memory 仍注入记忆" || ok "--no-memory 粗开关：一律不注入记忆"
+
 echo
 echo "==== 结果: $PASS passed, $FAIL failed, $SKIP skipped ===="
 [ "$FAIL" = 0 ]
