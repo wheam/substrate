@@ -15,9 +15,9 @@ import sys, os, re, glob, csv
 
 REQUIRED_FRONTMATTER = ["title", "created", "updated", "type"]
 
-# about-owner 体积护栏：约 8000 字符以上 → WARN「常驻小抄会偏大、该精简」。
-# 与 substrate-runtime-context 的小抄上限（默认 12000）留出余量给各区 Agent Packet + 路由表 + 房规。
-ABOUT_OWNER_MAX_CHARS = 8000
+# 核心摘要护栏：memory/about-owner/_core.md 每条消息都进常驻小抄，须精简（≤ CORE_MAX_CHARS）。
+# 分类记忆页全文不进小抄（按需读），故只盯核心、不再按 about-owner 总体积告警。
+CORE_MAX_CHARS = 3000
 MANIFEST_REQUIRED = ["name", "target_runtimes", "risk_level"]   # 见 schemas/skill-manifest.schema.yaml
 
 # 密钥/凭据扫描（红线「Forbidden：密钥永不进库」的检测层）。
@@ -347,15 +347,26 @@ def main(root):
         elif len(dchunks) >= 2 and leaders == 0:
             warn(f"fleet: 有 {len(dchunks)} 台 device 但无 migration_leader——跨版本迁移没有专责机（建议指定一台）  ({rel(root,fleet_f)})")
 
-    # 12) about-owner 体积护栏：跨 agent 共享记忆若膨胀，会让 substrate-runtime-context 的常驻小抄偏大
-    #     （每个 session 都灌）。统计 memory/about-owner/*.md（除 README 索引页）正文总字符；超阈值 → WARN。
-    ao_total = 0
-    for m in mds:
-        if under(root, m, os.path.join("memory", "about-owner")) and os.path.basename(m).lower() != "readme.md":
-            ao_total += len(texts.get(m) or "")
-    if ao_total > ABOUT_OWNER_MAX_CHARS:
-        warn(f"about-owner 体积偏大  memory/about-owner 共 {ao_total} 字符（>{ABOUT_OWNER_MAX_CHARS}）"
-             f"——常驻小抄（substrate-runtime-context）每个 session 都灌它，建议精简或拆到 knowledge/")
+    # 12) 核心摘要护栏：常驻小抄（substrate-runtime-context）只把 _core.md 整段灌进每条消息，
+    #     分类记忆页只进「记忆目录」、正文按需读。故只盯 _core.md 别超量；缺核心则提示生成。
+    ao_dir = os.path.join("memory", "about-owner")
+    core_p = os.path.join(root, "memory", "about-owner", "_core.md")
+    core_t = texts.get(core_p)
+    if core_t is None:
+        core_t = read_text(core_p)
+    if core_t is not None:
+        body = re.sub(r"\s*---\s*\n.*?\n---[ \t]*\n?", "", core_t, count=1, flags=re.S)
+        if len(body) > CORE_MAX_CHARS:
+            warn(f"核心摘要偏大  memory/about-owner/_core.md 正文 {len(body)} 字符（>{CORE_MAX_CHARS}）"
+                 f"——它每条消息都进常驻小抄，请精简、把细节下沉到分类记忆页（substrate-memory）")
+    else:
+        has_pages = any(under(root, m, ao_dir)
+                        and os.path.basename(m).lower() != "readme.md"
+                        and not os.path.basename(m).startswith("_")
+                        for m in mds)
+        if has_pages:
+            adv("memory/about-owner 有分类记忆页但缺 _core.md 核心摘要"
+                "——跑 substrate-memory 蒸馏一份，常驻小抄才有「always 进」的核心（其余页按需读）")
 
     print(f"substrate-doctor: {os.path.basename(root)}  ({len(mds)} md 文件)")
     for tag, items in (("ERROR", errors), ("WARN", warnings), ("ADVICE", advice)):

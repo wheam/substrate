@@ -467,10 +467,15 @@ RCX="$ENGINE/skills/substrate-runtime-context/render-context.py"
 expect_rc 2 "无效路径 → rc=2" python3 "$RCX" /no/such/dir
 T40="$(mktemp -d)/inst"; mkdir -p "$T40"; cp -R "$ENGINE/template/." "$T40/"
 mkdir -p "$T40/skills/substrate-todo"; cp "$ENGINE/skills/substrate-todo/SKILL.md" "$T40/skills/substrate-todo/SKILL.md"
-printf -- '---\ntitle: 饮食偏好\ntype: memory\nowner: <主人>\ncreated: 2026-01-01\nupdated: 2026-01-01\n---\n主人吃素，咖啡不加糖。\n' > "$T40/memory/about-owner/prefs.md"
+# _core.md = 核心摘要（永远整段进）；分类页只进「记忆目录」、正文不进
+printf -- '---\ntitle: 核心\ntype: memory\n---\n主人默认简体中文。\n' > "$T40/memory/about-owner/_core.md"
+printf -- '---\ntitle: 饮食偏好\ntype: memory\nsummary: 吃素、咖啡不加糖\nowner: <主人>\ncreated: 2026-01-01\nupdated: 2026-01-01\n---\n这里是饮食偏好的大段正文XYZ。\n' > "$T40/memory/about-owner/prefs.md"
 OUT40="$(python3 "$RCX" "$T40" 2>/dev/null)"
 printf '%s' "$OUT40" | grep -q "substrate-memory" && ok "纳入各区 Agent Packet" || bad "缺 Agent Packet"
-printf '%s' "$OUT40" | grep -q "主人吃素" && ok "纳入 about-owner 记忆正文" || bad "缺 about-owner 正文"
+printf '%s' "$OUT40" | grep -q "主人默认简体中文" && ok "核心摘要 _core.md 整段进" || bad "缺核心摘要"
+printf '%s' "$OUT40" | grep -q "记忆目录" && ok "记忆目录段存在" || bad "缺记忆目录段"
+printf '%s' "$OUT40" | grep -q "吃素、咖啡不加糖" && ok "分类页 summary 进目录" || bad "缺分类页 summary"
+printf '%s' "$OUT40" | grep -q "大段正文XYZ" && bad "分类页正文被 dump（应只进目录）" || ok "分类页正文不进小抄（按需读）"
 printf '%s' "$OUT40" | grep -q "type: memory" && bad "记忆 frontmatter 泄漏" || ok "记忆 frontmatter 已剥离"
 printf '%s' "$OUT40" | grep -q "加个待办" && ok "路由表从 skill description 派生" || bad "缺路由表触发词"
 # 路由表只收 substrate-*：自定义 skill 不该混进来（防小抄膨胀 + 信号稀释）
@@ -480,8 +485,8 @@ printf '%s' "$OUT40b" | grep -q "curio" && bad "路由表漏进自定义 skill c
 printf '%s' "$OUT40" | grep -q "先提议后写\|绝不擅自写库" && ok "房规（主动捕获先提议）已含" || bad "缺房规"
 # about-owner 的 README 索引页不当作记忆正文混入
 printf '%s' "$OUT40" | grep -q "命名约定（引擎中立）" && bad "about-owner/README 被误当记忆" || ok "about-owner/README 不混入记忆段"
-# 体积护栏：超上限只 stderr 告警、stdout 仍出内容、rc=0
-{ printf -- '---\ntitle: big\ntype: memory\n---\n'; python3 -c "print('主人偏好 '*4000)"; } > "$T40/memory/about-owner/big.md"
+# 体积护栏：超上限只 stderr 告警、stdout 仍出内容、rc=0（核心摘要撑大小抄）
+{ printf -- '---\ntitle: 核心\ntype: memory\n---\n'; python3 -c "print('主人偏好 '*4000)"; } > "$T40/memory/about-owner/_core.md"
 ERR40="$(python3 "$RCX" "$T40" 2>&1 >/dev/null)"; rc40=$?
 printf '%s' "$ERR40" | grep -q "体积" && ok "超体积上限 → stderr 告警" || bad "超体积无告警"
 [ "$rc40" = 0 ] && ok "超体积仍 rc=0（只告警不失败）" || bad "超体积误致非0 (rc=$rc40)"
@@ -489,21 +494,23 @@ python3 "$RCX" "$T40" 2>/dev/null | grep -q "主人偏好" && ok "超体积 stdo
 # 缺区容忍：examples/minimal 没有 todo/memory 区也不崩、不报错
 expect_rc 0 "缺 todo/memory 区也正常生成（examples/minimal）" python3 "$RCX" "$ENGINE/examples/minimal"
 
-echo "== 41) doctor: about-owner 体积超阈值 → WARN（防常驻小抄膨胀，不改退出码）=="
+echo "== 41) doctor: _core.md 核心摘要护栏（>3000 WARN）+ 缺核心 ADVICE（不改退出码）=="
+# 41a) _core.md 超 3000 字符 → WARN（它每条消息都进小抄），但只 WARN 不致 rc1
 T41="$(mktemp -d)/inst"; mkdir -p "$T41"; cp -R "$ENGINE/template/." "$T41/"
-{ printf -- '---\ntitle: big\ntype: memory\nowner: x\ncreated: 2026-01-01\nupdated: 2026-01-01\n---\n见 [[prefs]] 与 [[owner]]。\n'; python3 -c "print('主人偏好细节 '*1500)"; } > "$T41/memory/about-owner/big.md"
-printf -- '---\ntitle: p\ntype: memory\nowner: x\ncreated: 2026-01-01\nupdated: 2026-01-01\n---\n小事实。见 [[big]] 与 [[owner]]。\n' > "$T41/memory/about-owner/prefs.md"
-printf -- '---\ntitle: o\ntype: memory\nowner: x\ncreated: 2026-01-01\nupdated: 2026-01-01\n---\n主人。见 [[big]] 与 [[prefs]]。\n' > "$T41/memory/about-owner/owner.md"
-printf '\n- [[big]]\n- [[prefs]]\n- [[owner]]\n' >> "$T41/memory/about-owner/README.md"
-python3 "$DOC" "$T41" 2>&1 | grep -q "about-owner 体积" && ok "about-owner 膨胀 → WARN" || bad "about-owner 膨胀未 WARN"
-expect_rc 0 "about-owner 体积是 WARN 不致 rc1" python3 "$DOC" "$T41"
-# 小 about-owner 不误报
-python3 "$DOC" "$ENGINE/template" 2>&1 | grep -q "about-owner 体积" && bad "小 about-owner 误报体积" || ok "小 about-owner 不误报"
+{ printf -- '---\ntitle: 核心\ntype: memory\n---\n'; python3 -c "print('核心偏好细节 '*700)"; } > "$T41/memory/about-owner/_core.md"
+python3 "$DOC" "$T41" 2>&1 | grep -q "核心摘要偏大" && ok "_core.md 超量 → WARN" || bad "_core.md 超量未 WARN"
+expect_rc 0 "_core.md 超量是 WARN 不致 rc1" python3 "$DOC" "$T41"
+# 41b) 有分类页但无 _core.md → ADVICE
+T41b="$(mktemp -d)/inst"; mkdir -p "$T41b"; cp -R "$ENGINE/template/." "$T41b/"
+printf -- '---\ntitle: 沟通\ntype: memory\nsummary: x\nowner: y\ncreated: 2026-01-01\nupdated: 2026-01-01\n---\n见 [[owner]] 与 [[prefs]]。\n' > "$T41b/memory/about-owner/communication.md"
+python3 "$DOC" "$T41b" 2>&1 | grep -q "缺 _core.md" && ok "有分类页缺 _core → ADVICE" || bad "缺 _core 未 ADVICE"
+# 41c) 小 _core / template 不误报核心超量
+python3 "$DOC" "$ENGINE/template" 2>&1 | grep -q "核心摘要偏大" && bad "template 误报核心超量" || ok "小核心/template 不误报"
 
 echo "== 42) wire-context: runtime 中立——按 adapter 的 runtime_context 决定开/关，核心不认 runtime 名 =="
 WC="$ENGINE/skills/substrate-runtime-context/wire-context.py"
 T42="$(mktemp -d)/inst"; mkdir -p "$T42"; cp -R "$ENGINE/template/." "$T42/"
-printf -- '---\ntitle: 偏好\ntype: memory\nowner: x\ncreated: 2026-01-01\nupdated: 2026-01-01\n---\n主人吃素。\n' > "$T42/memory/about-owner/prefs.md"
+printf -- '---\ntitle: 核心\ntype: memory\n---\n主人吃素。\n' > "$T42/memory/about-owner/_core.md"
 DG="$(mktemp -d)/ctx.md"
 # hermes adapter default_on:true → ON，--apply 把小抄刷到 env override 指定的落地文件（不碰真 ~/.hermes）
 OUT42="$(HERMES_SUBSTRATE_CONTEXT="$DG" python3 "$WC" --instance "$T42" --runtime hermes --adapters "$ENGINE/adapters" --apply 2>/dev/null)"; rc42=$?
@@ -528,7 +535,7 @@ HERMES_SUBSTRATE_CONTEXT="$(mktemp -d)/c.md" python3 "$WC" --instance "$T42" --r
 echo "== 43) wire-context: --adapters 默认 <instance>/adapters（自包含实例 vendor 了 adapters）=="
 WC2="$ENGINE/skills/substrate-runtime-context/wire-context.py"
 T43="$(mktemp -d)/inst"; mkdir -p "$T43"; cp -R "$ENGINE/template/." "$T43/"; cp -R "$ENGINE/adapters" "$T43/adapters"
-printf -- '---\ntitle: p\ntype: memory\nowner: x\ncreated: 2026-01-01\nupdated: 2026-01-01\n---\n主人吃素。\n' > "$T43/memory/about-owner/prefs.md"
+printf -- '---\ntitle: 核心\ntype: memory\n---\n主人吃素。\n' > "$T43/memory/about-owner/_core.md"
 DG43="$(mktemp -d)/c.md"; EMPTY43="$(mktemp -d)"
 # 从没有 adapters/ 的 cwd 跑、且不传 --adapters → 仍应用 <instance>/adapters 找到 hermes 并 ON
 ( cd "$EMPTY43" && HERMES_SUBSTRATE_CONTEXT="$DG43" python3 "$WC2" --instance "$T43" --runtime hermes --apply >/dev/null 2>&1 )

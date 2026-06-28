@@ -32,19 +32,41 @@ def strip_frontmatter(text):
     return text[m.end():] if m else text
 
 
-def gather_memory(root):
-    """收 memory/about-owner/*.md 的正文（剥 frontmatter；跳过 README 索引页）。"""
+def fm_field(text, key):
+    """读 frontmatter 里的标量字段（剥引号）。无则 None。"""
+    m = re.match(r"\s*---\s*\n(.*?)\n---", text, re.S)
+    if not m:
+        return None
+    f = re.search(r"(?m)^%s:[ \t]*(.+?)[ \t]*$" % re.escape(key), m.group(1))
+    return f.group(1).strip().strip("'\"") if f else None
+
+
+def read_core(root):
+    """核心摘要 memory/about-owner/_core.md 的正文（永远整段进小抄）。无则 None。"""
+    t = read_text(os.path.join(root, "memory", "about-owner", "_core.md"))
+    if not t:
+        return None
+    body = strip_frontmatter(t).strip()
+    return body or None
+
+
+def memory_index(root):
+    """其余分类记忆页的一行索引（summary→title→slug；跳过 README 与 `_*` 结构页）。
+
+    分类页全文不进小抄——只列目录，agent 需要细节时用 substrate-memory 现读对应页。
+    """
     out = []
     base = os.path.join(root, "memory", "about-owner")
     for p in sorted(glob.glob(os.path.join(base, "*.md"))):
-        if os.path.basename(p).lower() == "readme.md":
+        name = os.path.basename(p)
+        if name.lower() == "readme.md" or name.startswith("_"):
             continue
         t = read_text(p)
         if not t:
             continue
-        body = strip_frontmatter(t).strip()
-        if body:
-            out.append(body)
+        slug = os.path.splitext(name)[0]
+        desc = fm_field(t, "summary") or fm_field(t, "title") or slug
+        out.append("- [[%s]] — %s" % (slug, desc))
     return out
 
 
@@ -110,10 +132,14 @@ def router(root):
 
 def render(root):
     parts = ["# Substrate 常驻上下文（自动生成，勿手改）"]
-    memory = gather_memory(root)
-    if memory:
-        parts.append("## 关于主人（记忆）")
-        parts.extend(memory)
+    core = read_core(root)
+    if core:
+        parts.append("## 关于主人（核心）")
+        parts.append(core)
+    idx = memory_index(root)
+    if idx:
+        parts.append("## 关于主人（记忆目录，需要细节时用 substrate-memory 读对应页）")
+        parts.append("\n".join(idx))
     packets = zone_packets(root)
     if packets:
         parts.append("## 库里有什么（各区速览）")

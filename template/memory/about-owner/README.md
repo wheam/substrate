@@ -19,6 +19,13 @@
 
 默认 `readers/writers: [all]`。若某些记忆只该给特定 runtime 看，在 `../../governance/zones.md` 把 memory 区的 readers/writers 改为具体 runtime（如 `[claude-code]`）。
 
+## 形态：核心摘要 + 分类页（按需读）
+
+为了让常驻上下文（`substrate-runtime-context`）每条消息只带「核心」而不随记忆膨胀：
+
+- **`_core.md`**（结构页，下划线前缀）= **核心摘要**：跨场景永远该知道的身份 + 最关键偏好，由 `substrate-memory` 蒸馏维护，**≤ 3000 字符**（doctor 超量告警）。它**整段**进常驻小抄。
+- **分类页 `*.md`**（如 `communication-preferences.md`）= 细节。**正文不进小抄**，只有 frontmatter 的 `summary`（一句话）进「记忆目录」；agent 需要细节时才用 `substrate-memory` 现读本页。
+
 ## frontmatter
 
 ```yaml
@@ -28,6 +35,7 @@ type: memory
 owner: <你的名字>
 created: YYYY-MM-DD
 updated: YYYY-MM-DD
+summary: 一句话摘要        # 进常驻小抄的「记忆目录」；不写则退回 title
 tags: [偏好/事实/...]
 sources: [来源]
 ---
