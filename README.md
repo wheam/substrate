@@ -60,8 +60,9 @@ Please do it for me, and STOP and tell me if any step fails (don't silently cont
    `git init && git add -A && git commit -m "init"` inside it.
 5. Install the maintenance skills into YOUR runtime:
    python3 <instance>/skills/substrate-sync/sync.py --src <instance>/skills --runtime <your-runtime> --apply
-   Then VERIFY at least one skill was actually installed. If 0 were installed, the
-   --runtime value is wrong for your agent — stop and ask me.
+   VERIFY at least one skill was actually installed — sync now WARNs and exits non-zero if
+   --src has no skills. If 0 were installed, the --src path is likely wrong (point it at
+   <instance>/skills), or --runtime doesn't match your agent — stop and ask me.
 6. Run substrate-doctor on the instance; if it reports any ERROR, stop and show me.
 6b. (Only if YOUR runtime is a conversational assistant like Hermes — skip for code-focused
    runtimes such as Claude Code / Codex) Wire standing-context injection so you auto-load my
