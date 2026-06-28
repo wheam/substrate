@@ -5,7 +5,8 @@
 #              所以只记 source（marketplace/插件名），sync 不 clone、不负责更新——更新交回插件机制。
 #              用于「我装了某插件 skill，想在 registry 里登记它（清单/可复现），但它不是 git-clone 形态」。
 type: object
-required: [name, kind, target_runtimes]
+# kind 不列必填：它有 default: git（缺省即 git）。两者并存才自洽——消费方（doctor/sync）都按「缺省 git」处理。
+required: [name, target_runtimes]
 properties:
   name:             { type: string }
   kind:             { enum: [git, plugin], default: git, description: "git=clone URL@pin；plugin=插件机制管理，sync 不 clone" }

@@ -64,7 +64,8 @@ write_engine_source_url() {   # $1 = 实例根；best-effort 由引擎 git origi
 
 # ── 刷新模式（引擎升级后重新 vendor）──
 if [ "${1:-}" = "--refresh" ]; then
-  DEST="${2:?用法: init-instance.sh --refresh <实例目录>}"
+  DEST="${2:-}"
+  [ -n "$DEST" ] || { echo "用法: init-instance.sh --refresh <实例目录>" >&2; exit 2; }
   [ -d "$DEST/skills" ] || { echo "不是实例目录（无 skills/）: $DEST" >&2; exit 2; }
   vendor_skills "$DEST/skills"
   vendor_adapters "$DEST"
@@ -75,7 +76,8 @@ if [ "${1:-}" = "--refresh" ]; then
 fi
 
 # ── 脚手架新实例 ──
-DEST="${1:?用法: init-instance.sh <目标目录> [实例名]}"
+DEST="${1:-}"
+[ -n "$DEST" ] || { echo "用法: init-instance.sh <目标目录> [实例名]" >&2; exit 2; }
 NAME="${2:-$(basename "$DEST")}"
 [ -e "$DEST" ] && { echo "目标已存在，拒绝覆盖: $DEST" >&2; exit 2; }
 

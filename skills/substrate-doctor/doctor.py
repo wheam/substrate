@@ -236,6 +236,15 @@ def main(root):
             miss = [k for k in ("path", "schema", "maintainer_skill", "readers", "writers") if k not in present]
             if miss:
                 err(f"zones 契约: zone '{zid}' 缺必填字段 {', '.join(miss)}  ({rel(root,zones_f)})")
+            # 枚举校验（仅当字段在场）：disposition 只能 canonical/reference——别和 admission 的页级
+            # 四去向（local-only/forbidden）混淆（schema 注释专门警告过这一点）；privacy 限四值。
+            dm = re.search(r"(?m)^\s*disposition:\s*(\S+)", chunk)
+            if dm and dm.group(1).strip("'\"") not in ("canonical", "reference"):
+                err(f"zones 契约: zone '{zid}' 的 disposition '{dm.group(1).strip()}' 非法"
+                    f"（只能 canonical/reference；local-only/forbidden 是 admission 页级去向，不是 zone 存储取向）  ({rel(root,zones_f)})")
+            prm = re.search(r"(?m)^\s*privacy:\s*(\S+)", chunk)
+            if prm and prm.group(1).strip("'\"") not in ("public", "internal", "private", "sensitive"):
+                err(f"zones 契约: zone '{zid}' 的 privacy '{prm.group(1).strip()}' 非法（只能 public/internal/private/sensitive）  ({rel(root,zones_f)})")
             pm = re.search(r"(?m)^\s*path:\s*(\S+)", chunk)
             if pm and not os.path.isdir(os.path.join(root, pm.group(1).strip("'\"").rstrip("/"))):
                 warn(f"zones 契约: zone '{zid}' 的 path '{pm.group(1)}' 在实例里不存在  ({rel(root,zones_f)})")
@@ -249,6 +258,10 @@ def main(root):
             name = chunk.splitlines()[0].strip()
             kindm = re.search(r"(?m)^\s*kind:\s*(\S+)", chunk)
             kind = (kindm.group(1).strip("'\"") if kindm else "git")
+            # 契约必填：target_runtimes（声明给哪些 runtime）。缺它 sync 会 fail-closed 静默跳过不装——
+            # 这里 WARN 把「悄悄失效」显形（与 skill-manifest 的 required 校验对称）。
+            if not re.search(r"(?m)^\s*target_runtimes\s*:", chunk):
+                warn(f"registry 条目缺 target_runtimes（必填；缺它 sync 会静默跳过不装该 skill）: {rel(root,reg)} 条目 {name}")
             if kind == "plugin":
                 # 插件机制管理：不 clone、无 pin。只要求登记了 source。
                 if not re.search(r"(?m)^\s*source:\s*\S", chunk):

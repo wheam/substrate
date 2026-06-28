@@ -255,10 +255,12 @@ def main():
     dry = not a.apply
     plan_own, plan_reg, skipped, undeclared, retired = [], [], [], [], []
 
+    n_skill_dirs = 0
     for entry in sorted(os.listdir(a.src)):
         d = os.path.join(a.src, entry)
         man = manifest_of(d)
         if man is None: continue
+        n_skill_dirs += 1   # --src 里到底有没有 skill（含 SKILL.md 的目录）——用于识别「指错/空目录」误配
         if man["deprecated"] or man["superseded_by"]:
             retired.append({"name": entry, "superseded_by": man["superseded_by"]})  # 退役件：不装，且从 target 清掉旧副本
             continue
@@ -274,7 +276,13 @@ def main():
     plan_reg, plugins, reg_undeclared, reg_rejected = parse_registry(a.registry, a.runtime)
     undeclared += [f"registry:{n}" for n in reg_undeclared]
 
+    # 误配显形：--src 里没有任何 skill（无 <name>/SKILL.md）且无 registry 条目 = 八成 --src 指错/为空。
+    # 别让「装了 0 个」静默 exit 0 骗过自动化 agent——dry-run 也告警；--apply 直接非 0。
+    empty_src = (n_skill_dirs == 0 and not plan_reg and not plugins)
+
     print(f"substrate-sync  runtime={a.runtime}  target={a.target}  mode={'DRY-RUN' if dry else 'APPLY'}")
+    if empty_src:
+        print(f"  [WARN] --src={a.src} 里没有任何可识别的 skill（无 <name>/SKILL.md）——很可能 --src 指错目录或目录为空。")
     for p in plan_own: print(f"  own      install {p['name']}  ({p['variant']})")
     for p in plan_reg: print(f"  registry {'clone' if p['pin'] else 'SKIP(no-pin!)'} {p['name']}  {p['url']}@{p['pin']}")
     for p in plugins:  print(f"  plugin   {p['name']}  (kind=plugin；由插件机制管理，sync 不安装/更新；source={p['source'] or '?'})")
@@ -342,6 +350,9 @@ def main():
                "skills_tree": skills_tree(a.src), "installed": installed},
               open(mpath, "w"), ensure_ascii=False, indent=2)
     print(f"  → 装了 {len(installed)} 个；清单写入 {mpath}")
+    if empty_src:
+        print(f"  [WARN] 本次 --apply 没装任何 skill：--src={a.src} 里没有 skill。请核对 --src 路径（疑似误配）。")
+        return 1
     if failed:
         print(f"  [WARN] {len(failed)} 个 registry 条目未安装: {failed}")
         return 1
